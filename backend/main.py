@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from backend.db import database
 from backend.routes import collections, companies
+from backend.routes.operations import router as operations_router
 
 
 @asynccontextmanager
@@ -151,6 +152,7 @@ EXECUTE FUNCTION throttle_updates();
 
 app.include_router(companies.router)
 app.include_router(collections.router)
+app.include_router(operations_router)
 
 app.add_middleware(
     CORSMiddleware,
