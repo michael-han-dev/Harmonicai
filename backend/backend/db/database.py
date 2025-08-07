@@ -49,6 +49,10 @@ class Company(Base):
     )
     id = Column(Integer, primary_key=True, index=True)
     company_name = Column(String, index=True)
+    team_size = Column(Integer)
+    funding_round = Column(String)  # "pre-seed", "seed", "Series A", "Series B", "Series C"
+    industry = Column(String)
+    founded_year = Column(Integer)
 
 class CompanyCollection(Base):
     __tablename__ = "company_collections"

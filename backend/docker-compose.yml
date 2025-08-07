@@ -15,6 +15,11 @@ services:
     ports:
       - "5433:5432"
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
   web-api:
     build: .
     volumes:
@@ -25,8 +30,24 @@ services:
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       - postgres-jam-db
+      - redis
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres-jam-db:5432/harmonicjam
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+
+  celery-worker:
+    build: .
+    volumes:
+      - .:/app
+    command: celery -A backend.celery_app worker --loglevel=info
+    depends_on:
+      - postgres-jam-db
+      - redis
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres-jam-db:5432/harmonicjam
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
 
 volumes:
   postgres_data:

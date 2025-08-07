@@ -13,6 +13,10 @@ router = APIRouter(
 class CompanyOutput(BaseModel):
     id: int
     company_name: str
+    team_size: int
+    funding_round: str
+    industry: str
+    founded_year: int
     liked: bool
 
 
@@ -51,6 +55,10 @@ def fetch_companies_with_liked(
         CompanyOutput(
             id=company.id,
             company_name=company.company_name,
+            team_size=company.team_size,
+            funding_round=company.funding_round,
+            industry=company.industry,
+            founded_year=company.founded_year,
             liked=True if liked else False,
         )
         for company, liked in results
