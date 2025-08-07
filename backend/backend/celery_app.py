@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from kombu import Queue
 
 # Create Celery instance
 celery_app = Celery(
@@ -18,4 +19,9 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     task_ignore_result=False,
+    task_queues=(
+        Queue("interactive"),
+        Queue("bulk"),
+    ),
+    task_default_queue="bulk",
 )
