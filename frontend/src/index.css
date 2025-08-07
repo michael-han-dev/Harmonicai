@@ -1,70 +1,106 @@
+/* Import Inter font first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
+@layer base {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    --background: 240 100.0000% 98.0392%;
+    --foreground: 240 27.5862% 22.7451%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 27.5862% 22.7451%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 27.5862% 22.7451%;
+    --primary: 251.9008 55.7604% 57.4510%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 249.3750 100% 93.7255%;
+    --secondary-foreground: 249.3750 33.3333% 37.6471%;
+    --muted: 240 50.0000% 96.0784%;
+    --muted-foreground: 240 12.1951% 48.2353%;
+    --accent: 218.4615 100.0000% 92.3529%;
+    --accent-foreground: 240 27.5862% 22.7451%;
+    --destructive: 350.1754 100% 66.4706%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 34.7826% 90.9804%;
+    --input: 240 34.7826% 90.9804%;
+    --ring: 251.9008 55.7604% 57.4510%;
+    --chart-1: 251.9008 55.7604% 57.4510%;
+    --chart-2: 249.6429 94.9153% 76.8627%;
+    --chart-3: 239.1781 82.0225% 65.0980%;
+    --chart-4: 243.1579 93.0070% 71.9608%;
+    --chart-5: 243.6522 47.3251% 47.6471%;
+    --sidebar: 240 50.0000% 96.0784%;
+    --sidebar-foreground: 240 27.5862% 22.7451%;
+    --sidebar-primary: 251.9008 55.7604% 57.4510%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 218.4615 100.0000% 92.3529%;
+    --sidebar-accent-foreground: 240 27.5862% 22.7451%;
+    --sidebar-border: 240 34.7826% 90.9804%;
+    --sidebar-ring: 251.9008 55.7604% 57.4510%;
+    --radius: 0.5rem;
   }
-  a:hover {
-    color: #747bff;
+  
+  .dark {
+    --background: 240 26.8293% 8.0392%;
+    --foreground: 240 48.7179% 92.3529%;
+    --card: 240 27.7778% 14.1176%;
+    --card-foreground: 240 48.7179% 92.3529%;
+    --popover: 240 27.7778% 14.1176%;
+    --popover-foreground: 240 48.7179% 92.3529%;
+    --primary: 251.2500 100% 78.0392%;
+    --primary-foreground: 240 26.8293% 8.0392%;
+    --secondary: 242.8571 32.8125% 25.0980%;
+    --secondary-foreground: 241.9672 100% 88.0392%;
+    --muted: 240 33.3333% 20%;
+    --muted-foreground: 240 20.2532% 69.0196%;
+    --accent: 240 33.3333% 28.2353%;
+    --accent-foreground: 240 48.7179% 92.3529%;
+    --destructive: 350.1754 100% 66.4706%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 26.1538% 25.4902%;
+    --input: 240 26.1538% 25.4902%;
+    --ring: 251.2500 100% 78.0392%;
+    --chart-1: 251.2500 100% 78.0392%;
+    --chart-2: 230.4878 44.0860% 63.5294%;
+    --chart-3: 206.7123 89.0244% 67.8431%;
+    --chart-4: 174.2857 41.8327% 50.7843%;
+    --chart-5: 325.5224 100.0000% 73.7255%;
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: "Inter", sans-serif;
+  }
+  
+  html {
+    color-scheme: light dark;
+  }
+}
+
+/* Fancy theme switch reveal using the View Transitions API */
+@layer utilities {
+  @supports (view-transition-name: none) {
+    /* Cancel default cross-fade and use a radial reveal from the click point */
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+      animation: none;
+    }
+    ::view-transition-new(root) {
+      animation: reveal-circle 800ms ease-in-out both;
+      clip-path: circle(0 at var(--theme-x, 50%) var(--theme-y, 50%));
+    }
+    @keyframes reveal-circle {
+      to {
+        clip-path: circle(200% at var(--theme-x, 50%) var(--theme-y, 50%));
+      }
+    }
   }
 }

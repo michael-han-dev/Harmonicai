@@ -3,6 +3,10 @@ import axios from 'axios';
 export interface ICompany {
     id: number;
     company_name: string;
+    team_size: number;
+    funding_round: string;
+    industry: string;
+    founded_year: number;
     liked: boolean;
 }
 

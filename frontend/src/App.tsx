@@ -1,17 +1,10 @@
-import "./App.css";
-
-import CssBaseline from "@mui/material/CssBaseline";
-import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { useEffect, useState } from "react";
+import "./App.css";
 import CompanyTable from "./components/CompanyTable";
 import { getCollectionsMetadata } from "./utils/jam-api";
 import useApi from "./utils/useApi";
-
-const darkTheme = createTheme({
-  palette: {
-    mode: "dark",
-  },
-});
+import { Card } from "@/components/ui/card";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 function App() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
@@ -28,43 +21,47 @@ function App() {
   }, [selectedCollectionId]);
 
   return (
-    <ThemeProvider theme={darkTheme}>
-      <CssBaseline />
-      <div className="mx-8">
-        <div className="font-bold text-xl border-b p-2 mb-4 text-left">
-          Harmonic Jam
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-8 py-6">
+        <div className="flex items-center justify-between border-b border-border pb-2 mb-6">
+          <div className="font-bold text-xl">Harmonic Jam</div>
+          <ThemeToggle />
         </div>
-        <div className="flex">
+        <div className="flex gap-6">
           <div className="w-1/5">
-            <p className=" font-bold border-b mb-2 pb-2 text-left">
-              Collections
-            </p>
-            <div className="flex flex-col gap-2 text-left">
-              {collectionResponse?.map((collection) => {
-                return (
-                  <div
-                    className={`py-1 pl-4 hover:cursor-pointer hover:bg-orange-300 ${
-                      selectedCollectionId === collection.id &&
-                      "bg-orange-500 font-bold"
-                    }`}
-                    onClick={() => {
-                      setSelectedCollectionId(collection.id);
-                    }}
-                  >
-                    {collection.collection_name}
-                  </div>
-                );
-              })}
-            </div>
+            <Card className="p-4">
+              <p className="font-bold border-b border-border mb-4 pb-2 text-left">
+                Collections
+              </p>
+              <div className="flex flex-col gap-2 text-left">
+                {collectionResponse?.map((collection) => {
+                  return (
+                    <div
+                      key={collection.id}
+                      className={`py-2 px-4 rounded-md cursor-pointer transition-colors ${
+                        selectedCollectionId === collection.id
+                          ? "bg-primary text-primary-foreground font-bold"
+                          : "hover:bg-accent hover:text-accent-foreground"
+                      }`}
+                      onClick={() => {
+                        setSelectedCollectionId(collection.id);
+                      }}
+                    >
+                      {collection.collection_name}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
           </div>
-          <div className="w-4/5 ml-4">
+          <div className="w-4/5">
             {selectedCollectionId && (
               <CompanyTable selectedCollectionId={selectedCollectionId} />
             )}
           </div>
         </div>
       </div>
-    </ThemeProvider>
+    </div>
   );
 }
 
