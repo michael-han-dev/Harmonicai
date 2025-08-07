@@ -74,6 +74,6 @@ class CompanyCollectionAssociation(Base):
         DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False
     )
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("companies.id"))
-    collection_id = Column(UUID(as_uuid=True), ForeignKey("company_collections.id"))
+    company_id = Column(Integer, ForeignKey("companies.id"), index=True)
+    collection_id = Column(UUID(as_uuid=True), ForeignKey("company_collections.id"), index=True)
 
