@@ -56,12 +56,12 @@ def seed_database(db: Session):
         "Creator Economy"
     ]
     
-    funding_rounds = ["pre-seed", "seed", "Series A", "Series B", "Series C"]
+    funding_rounds = ["Pre-seed", "Seed", "Series A", "Series B", "Series C"]
     
     #team size ranges by funding round
     team_size_ranges = {
-        "pre-seed": (2, 10),
-        "seed": (5, 20),
+        "Pre-seed": (2, 10),
+        "Seed": (5, 20),
         "Series A": (7, 75),
         "Series B": (20, 150),
         "Series C": (40, 300)

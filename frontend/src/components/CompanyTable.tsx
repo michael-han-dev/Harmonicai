@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getCollectionsById, ICompany } from "../utils/jam-api";
+import { getCollectionsById, ICompany, ICollection, startBulkAdd } from "../utils/jam-api";
+import { BackgroundTask } from "./BackgroundTasksManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +15,23 @@ import {
 } from "@/components/ui/table";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-const CompanyTable = (props: { selectedCollectionId: string }) => {
+type SelectionMode = 'none' | 'all';
+
+interface CompanyTableProps {
+  selectedCollectionId: string;
+  collectionResponse?: ICollection[];
+  onStartBulkTask: (task: BackgroundTask) => void;
+  getCollectionName: (collectionId: string) => string;
+}
+
+const CompanyTable = (props: CompanyTableProps) => {
   const [response, setResponse] = useState<ICompany[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [offset, setOffset] = useState<number>(0);
   const [pageSize, setPageSize] = useState(25);
-  const [selectedCompanies, setSelectedCompanies] = useState<Set<number>>(new Set());
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>('none');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [excludedIds, setExcludedIds] = useState<Set<number>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -35,105 +47,189 @@ const CompanyTable = (props: { selectedCollectionId: string }) => {
 
   useEffect(() => {
     setOffset(0);
-    setSelectedCompanies(new Set());
+    setSelectionMode('none');
+    setSelectedIds(new Set());
+    setExcludedIds(new Set());
   }, [props.selectedCollectionId]);
 
   const currentPage = Math.floor(offset / pageSize) + 1;
   const totalPages = Math.ceil(total / pageSize);
 
+  // Helper functions for selection state
+  const isCompanySelected = (companyId: number): boolean => {
+    if (selectionMode === 'all') {
+      return !excludedIds.has(companyId);
+    }
+    return selectedIds.has(companyId);
+  };
+
+  const getSelectedCount = (): number => {
+    if (selectionMode === 'all') {
+      return total - excludedIds.size;
+    }
+    return selectedIds.size;
+  };
+
+  const getSelectedCompanyIds = (): number[] => {
+    if (selectionMode === 'all') {
+      // Return mode='all' for API calls
+      return [];
+    }
+    return Array.from(selectedIds);
+  };
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedCompanies(new Set(response.map(company => company.id)));
+      if (total > response.length) {
+        // More companies exist beyond current page - select all in collection
+        setSelectionMode('all');
+        setExcludedIds(new Set());
+        setSelectedIds(new Set());
+      } else {
+        //selects on current page
+        setSelectionMode('none');
+        setSelectedIds(new Set(response.map(c => c.id)));
+        setExcludedIds(new Set());
+      }
     } else {
-      setSelectedCompanies(new Set());
+      // Deselect all
+      setSelectionMode('none');
+      setSelectedIds(new Set());
+      setExcludedIds(new Set());
     }
   };
 
   const handleSelectCompany = (companyId: number, checked: boolean) => {
-    const newSelected = new Set(selectedCompanies);
-    if (checked) {
-      newSelected.add(companyId);
+    if (selectionMode === 'all') {
+      const newExcluded = new Set(excludedIds);
+      if (checked) {
+        newExcluded.delete(companyId);
+      } else {
+        newExcluded.add(companyId);
+      }
+      setExcludedIds(newExcluded);
     } else {
-      newSelected.delete(companyId);
+      const newSelected = new Set(selectedIds);
+      if (checked) {
+        newSelected.add(companyId);
+      } else {
+        newSelected.delete(companyId);
+      }
+      setSelectedIds(newSelected);
     }
-    setSelectedCompanies(newSelected);
   };
 
-  const getFundingRoundColor = (fundingRound: string) => {
-    const colors = {
-      "pre-seed": "bg-red-500/20 text-red-300 border-red-500/30",
-      "seed": "bg-orange-500/20 text-orange-300 border-orange-500/30", 
-      "Series A": "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
-      "Series B": "bg-green-500/20 text-green-300 border-green-500/30",
-      "Series C": "bg-blue-500/20 text-blue-300 border-blue-500/30",
-    };
-    return colors[fundingRound as keyof typeof colors] || "bg-gray-500/20 text-gray-300 border-gray-500/30";
+  // Find the "Liked Companies List" collection
+  const likedCollection = props.collectionResponse?.find(c => 
+    c.collection_name === "Liked Companies List"
+  );
+
+  const handleBulkAddToLiked = async () => {
+    if (!likedCollection) {
+      alert('Could not find "Liked Companies List" collection');
+      return;
+    }
+
+    const mode = selectionMode === 'all' ? 'all' : 'selected';
+    const companyIds = getSelectedCompanyIds();
+
+    if (mode === 'selected' && companyIds.length === 0) {
+      alert('No companies selected');
+      return;
+    }
+
+    try {
+      const result = await startBulkAdd(props.selectedCollectionId, likedCollection.id, {
+        mode,
+        companyIds: mode === 'selected' ? companyIds : undefined,
+      });
+
+      const task: BackgroundTask = {
+        taskId: result.task_id,
+        type: 'bulk_add',
+        sourceCollectionName: props.getCollectionName(props.selectedCollectionId),
+        targetCollectionName: likedCollection.collection_name,
+        targetCollectionId: likedCollection.id,
+        description: `Adding ${mode === 'all' ? 'all' : getSelectedCount()} companies to ${likedCollection.collection_name}`,
+        startTime: new Date(),
+      };
+
+      props.onStartBulkTask(task);
+
+      // Reset selection after starting task
+      setSelectionMode('none');
+      setSelectedIds(new Set());
+      setExcludedIds(new Set());
+
+    } catch (error) {
+      console.error('Error starting bulk add:', error);
+      alert('Failed to start bulk operation');
+    }
   };
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="flex justify-between items-center">
           <span>Companies ({total.toLocaleString()} total)</span>
           <div className="text-sm font-normal text-muted-foreground">
-            {selectedCompanies.size} selected
+            {getSelectedCount()} selected
+            {selectionMode === 'all' && (
+              <span className="ml-1 text-blue-400">(all)</span>
+            )}
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 p-0 overflow-hidden">
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
             <div className="text-muted-foreground">Loading companies...</div>
           </div>
         ) : (
           <>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
+            <div className="flex-1 overflow-auto">
+              <Table className="w-full table-fixed">
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
-                    <TableHead className="w-12">
+                    <TableHead className="w-12 text-left">
                       <Checkbox
-                        checked={selectedCompanies.size === response.length && response.length > 0}
+                        checked={
+                          selectionMode === 'all' || 
+                          (response.length > 0 && response.every(c => isCompanySelected(c.id)))
+                        }
                         onCheckedChange={handleSelectAll}
                       />
                     </TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Industry</TableHead>
-                    <TableHead>Team Size</TableHead>
-                    <TableHead>Funding</TableHead>
-                    <TableHead>Founded</TableHead>
-                    <TableHead>Liked</TableHead>
+                    <TableHead className="w-64 text-left">Company</TableHead>
+                    <TableHead className="w-48 text-left">Industry</TableHead>
+                    <TableHead className="w-24 text-center">Team Size</TableHead>
+                    <TableHead className="w-32 text-center">Funding</TableHead>
+                    <TableHead className="w-24 text-center">Founded</TableHead>
+                    <TableHead className="w-20 text-center">Liked</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {response.map((company) => (
                     <TableRow key={company.id}>
-                      <TableCell>
+                      <TableCell className="w-12 text-left">
                         <Checkbox
-                          checked={selectedCompanies.has(company.id)}
+                          checked={isCompanySelected(company.id)}
                           onCheckedChange={(checked) => 
                             handleSelectCompany(company.id, checked as boolean)
                           }
                         />
                       </TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="w-64 font-medium text-left">
                         {company.company_name}
-                        <div className="text-xs text-muted-foreground">ID: {company.id}</div>
+                        <div className="text-xs text-muted-foreground font-mono">ID: {company.id}</div>
                       </TableCell>
-                      <TableCell>{company.industry}</TableCell>
-                      <TableCell>{company.team_size}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className={getFundingRoundColor(company.funding_round)}
-                        >
-                          {company.funding_round}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{company.founded_year}</TableCell>
-                      <TableCell>
+                      <TableCell className="w-48 text-left">{company.industry}</TableCell>
+                      <TableCell className="w-24 text-center">{company.team_size}</TableCell>
+                      <TableCell className="w-32 text-center">{company.funding_round}</TableCell>
+                      <TableCell className="w-24 text-center">{company.founded_year}</TableCell>
+                      <TableCell className="w-20 text-center">
                         <Badge variant={company.liked ? "default" : "secondary"}>
-                          {company.liked ? "❤️ Liked" : "🤍"}
+                          {company.liked ? "❤️" : "X"}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -143,7 +239,7 @@ const CompanyTable = (props: { selectedCollectionId: string }) => {
             </div>
             
             {/* Pagination */}
-            <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center justify-between p-4 border-t bg-background">
               <div className="text-sm text-muted-foreground">
                 Showing {offset + 1} to {Math.min(offset + pageSize, total)} of {total.toLocaleString()} companies
               </div>
@@ -173,14 +269,17 @@ const CompanyTable = (props: { selectedCollectionId: string }) => {
             </div>
 
             {/* Bulk Actions */}
-            {selectedCompanies.size > 0 && (
-              <div className="mt-4 p-4 bg-accent rounded-md">
+            {getSelectedCount() > 0 && (
+              <div className="p-4 bg-accent border-t">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">
-                    {selectedCompanies.size} companies selected
+                    {getSelectedCount()} companies selected
+                    {selectionMode === 'all' && (
+                      <span className="text-blue-400"> (entire collection)</span>
+                    )}
                   </span>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline">
+                    <Button size="sm" variant="outline" onClick={handleBulkAddToLiked}>
                       Add to Liked
                     </Button>
                     <Button size="sm" variant="outline">

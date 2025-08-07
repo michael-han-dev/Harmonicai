@@ -1,5 +1,6 @@
-/* Import Inter font first */
+/* Import fonts first */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -73,15 +74,62 @@
 @layer base {
   * {
     @apply border-border;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
   }
   
-  body {
+  html, body {
     @apply bg-background text-foreground font-sans;
     font-family: "Inter", sans-serif;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    overflow-x: hidden;
+  }
+  
+  #root {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    min-height: 100vh;
   }
   
   html {
     color-scheme: light dark;
+  }
+
+  /* Cosmic-night themed scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Dark theme scrollbars */
+  .dark ::-webkit-scrollbar-track {
+    background: hsl(220 39% 11%);
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: hsl(220 14% 30%);
+    border-radius: 4px;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: hsl(220 14% 40%);
   }
 }
 

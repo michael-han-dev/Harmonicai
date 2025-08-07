@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.celery_app import celery_app
 from backend.db import database
-from backend.backend.tasks import bulk_add_companies, undo_bulk_add  # type: ignore
+from backend.tasks import bulk_add_companies, undo_bulk_add  # type: ignore
 
 
 router = APIRouter(tags=["operations"])
