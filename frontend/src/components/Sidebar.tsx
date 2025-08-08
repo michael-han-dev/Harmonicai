@@ -45,22 +45,22 @@ const Sidebar = () => {
   }, []);
 
   const mainMenuItems: SidebarItem[] = [
-    { icon: <Building2 className="w-5 h-5" />, label: "Company search", isActive: true },
-    { icon: <Users className="w-5 h-5" />, label: "People search" },
-    { icon: <Bookmark className="w-5 h-5" />, label: "Saved searches", count: 25 },
+    { icon: <Building2 className="w-5 h-5" />, label: "Company Search", isActive: true },
+    { icon: <Users className="w-5 h-5" />, label: "People Search" },
+    { icon: <Bookmark className="w-5 h-5" />, label: "Saved Searches", count: 25 },
     { icon: <List className="w-5 h-5" />, label: "Lists", count: collectionsCount },
     { icon: <EyeOff className="w-5 h-5" />, label: "Hidden" },
   ];
 
   const networkItems: SidebarItem[] = [
-    { icon: <Network className="w-5 h-5" />, label: "My network", count: 5 },
-    { icon: <Users2 className="w-5 h-5" />, label: "Team network", count: 15 },
+    { icon: <Network className="w-5 h-5" />, label: "My Network", count: 5 },
+    { icon: <Users2 className="w-5 h-5" />, label: "Team Network", count: 15 },
   ];
 
   const favoritesItems: SidebarItem[] = [
-    { icon: <DollarSign className="w-5 h-5" />, label: "Financial technology", count: 4 },
-    { icon: <Brain className="w-5 h-5" />, label: "Artificial intelligence", count: 12 },
-    { icon: <UserPlus className="w-5 h-5" />, label: "Free founders" },
+    { icon: <DollarSign className="w-5 h-5" />, label: "Financial Technology", count: 4 },
+    { icon: <Brain className="w-5 h-5" />, label: "Artificial Intelligence", count: 12 },
+    { icon: <UserPlus className="w-5 h-5" />, label: "Free Founders" },
   ];
 
   const bottomItems: SidebarItem[] = [
@@ -72,7 +72,7 @@ const Sidebar = () => {
     <div className="sidebar w-64 h-screen bg-background text-slate-700 dark:text-slate-200 flex flex-col border-r border-slate-200 dark:border-slate-700 overflow-x-hidden overflow-y-hidden">
       {/* Header */}
       <div className="p-6 border-b border-slate-200 dark:border-slate-700">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-1">
           <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
             <img 
               src="/harmonic_logo.png" 
@@ -92,19 +92,6 @@ const Sidebar = () => {
             </div>
           </div>
           <span className="text-lg font-semibold text-slate-800 dark:text-white">Harmonic</span>
-        </div>
-        
-        <div className="relative">
-          <div className="absolute left-3 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
-            <div className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded text-xs font-mono">
-              /
-            </div>
-          </div>
-          <input
-            type="text"
-            placeholder="Search..."
-            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg py-2 pl-12 pr-4 text-sm text-slate-700 dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
         </div>
       </div>
 

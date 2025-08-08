@@ -8,21 +8,34 @@ import useApi from "./utils/useApi";
 
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
-import { Share, X, Check, Link, Palette, Search, Copy, Settings, Lock, ChevronDown, Globe, HelpCircle, Download } from "lucide-react";
+import { Share, X, Link, Palette, Search, Copy, Settings, ChevronDown, Download } from "lucide-react";
+import SearchCommand from "./components/SearchCommand";
 
 function App() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'share' | 'publish'>('share');
-  const [generalAccess, setGeneralAccess] = useState<string>('only-people-invited');
-  const [showGeneralDropdown, setShowGeneralDropdown] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [showSearchCommand, setShowSearchCommand] = useState(false);
   const { data: collectionResponse } = useApi(() => getCollectionsMetadata());
 
   useEffect(() => {
     setSelectedCollectionId(collectionResponse?.[0]?.id);
   }, [collectionResponse]);
+
+  // Global keyboard shortcut for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearchCommand(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (selectedCollectionId) {
@@ -57,8 +70,27 @@ function App() {
         <div className="bg-background border-b border-border px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <h1 className="text-lg font-semibold">Company search</h1>
+              <h1 className="text-lg font-semibold">Company Search</h1>
+        </div>
+            
+            {/* Search Bar */}
+            <div className="flex-1 max-w-md mx-8">
+              <div 
+                className="relative cursor-pointer"
+                onClick={() => setShowSearchCommand(true)}
+              >
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border border-border rounded-md hover:bg-muted/70 transition-colors">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground flex-1 text-left">Search</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-1.5 py-0.5 text-xs bg-background border border-border rounded">
+                      /
+                    </kbd>
+                  </div>
+                    </div>
+              </div>
             </div>
+            
             <div className="flex items-center gap-2">
               <Button
                 size="icon"
@@ -68,8 +100,8 @@ function App() {
               >
                 <Share className="h-4 w-4" />
               </Button>
-          <ThemeToggle />
-        </div>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
 
@@ -231,7 +263,7 @@ function App() {
                         readOnly
                       />
                       <span className="text-muted-foreground">/</span>
-                      <span className="text-muted-foreground">{getCollectionName(selectedCollectionId)}...</span>
+                      <span className="text-muted-foreground">{selectedCollectionId ? getCollectionName(selectedCollectionId) : 'Collection'}...</span>
                       <div className="bg-[hsl(var(--primary))] text-primary-foreground text-xs px-2 py-1 rounded flex items-center gap-1">
                         <div className="w-2 h-2 rounded-full bg-white" />
                         Customize
@@ -303,6 +335,12 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Search Command */}
+      <SearchCommand 
+        isOpen={showSearchCommand}
+        onClose={() => setShowSearchCommand(false)}
+      />
     </div>
   );
 }
