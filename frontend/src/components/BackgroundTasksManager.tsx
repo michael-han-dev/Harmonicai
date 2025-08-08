@@ -127,31 +127,14 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
 
   const handleCancel = async (task: BackgroundTask) => {
     try {
-      // 1) Cancel the bulk job
+      // Request graceful cancellation only. Do not auto-trigger undo.
       await cancelOperation(task.taskId);
-      // 2) Immediately start an interactive undo to revert inserted rows so far
-      if (task.type === 'bulk_add' && task.targetCollectionId) {
-        try {
-          const { undo_task_id } = await undoOperation(task.taskId, { target_collection_id: task.targetCollectionId });
-          const undoTask: BackgroundTask = {
-            taskId: undo_task_id,
-            type: 'undo',
-            sourceCollectionName: task.targetCollectionName,
-            targetCollectionName: task.sourceCollectionName,
-            targetCollectionId: task.targetCollectionId,
-            description: `Undo: ${task.description}`,
-            startTime: new Date(),
-          };
-          setEphemeralTasks(prev => [...prev, undoTask]);
-          setUiStageByTask(prev => ({ ...prev, [undoTask.taskId]: 'loading', [task.taskId]: 'cancelled-show' }));
-          setCompletedTasks(prev => new Set([...prev, task.taskId]));
-          setTimeout(() => {
-            setUiStageByTask(prev => ({ ...prev, [task.taskId]: 'hidden' }));
-          }, 2000);
-        } catch (err) {
-          console.error('Error starting undo after cancel:', err);
-        }
-      }
+      // Optimistically reflect cancellation while polling catches up
+      setUiStageByTask(prev => ({ ...prev, [task.taskId]: 'cancelled-show' }));
+      // Do not mark as completed here; let polling update the final state
+      setTimeout(() => {
+        setUiStageByTask(prev => ({ ...prev, [task.taskId]: 'hidden' }));
+      }, 2000);
     } catch (error) {
       console.error('Error cancelling task:', error);
     }
@@ -217,6 +200,34 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
   );
 };
 
+// Harmonic Logo Animation Component
+const HarmonicLoader = ({ className = "" }: { className?: string }) => (
+  <div className={`relative ${className}`}>
+    {/* Outer rotating ring */}
+    <div className="absolute inset-0 rounded-full border-2 border-primary/30 animate-spin" 
+         style={{ animation: 'spin 3s linear infinite' }} />
+    
+    {/* Inner pulsing ring */}
+    <div className="absolute inset-1 rounded-full border border-primary/60 animate-pulse" />
+    
+    {/* Core harmonic symbol */}
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" 
+           style={{ animation: 'pulse 2s ease-in-out infinite alternate' }} />
+    </div>
+    
+    {/* Orbital dots */}
+    <div className="absolute inset-0">
+      <div className="absolute top-0 left-1/2 w-1 h-1 -ml-0.5 rounded-full bg-primary/70 animate-pulse"
+           style={{ animation: 'orbit-dot 4s ease-in-out infinite', transformOrigin: '50% 12px' }} />
+      <div className="absolute top-1/2 right-0 w-1 h-1 -mt-0.5 rounded-full bg-primary/70 animate-pulse"
+           style={{ animation: 'orbit-dot 4s ease-in-out infinite 1s', transformOrigin: '-12px 50%' }} />
+      <div className="absolute bottom-0 left-1/2 w-1 h-1 -ml-0.5 rounded-full bg-primary/70 animate-pulse"
+           style={{ animation: 'orbit-dot 4s ease-in-out infinite 2s', transformOrigin: '50% -12px' }} />
+    </div>
+  </div>
+);
+
 function renderToast(
   task: BackgroundTask,
   stage: UiStage,
@@ -225,19 +236,34 @@ function renderToast(
   onUndo?: (task: BackgroundTask) => void
 ) {
   return (
-    <div className="relative inline-flex items-center gap-2 bg-background/90 backdrop-blur px-3 py-2 rounded-md shadow border border-border">
+    <div className="relative inline-flex items-center gap-3 bg-background/90 backdrop-blur px-4 py-3 rounded-lg shadow-lg border border-border">
+      {/* Harmonic logo animation for bulk operations */}
+      {(stage === 'loading' && task.type === 'bulk_add') && (
+        <HarmonicLoader className="w-6 h-6 flex-shrink-0" />
+      )}
+      
+      {/* Other status icons */}
+      {stage === 'done-show' && (
+        <CheckCircle2 className="h-6 w-6 text-green-400 flex-shrink-0" />
+      )}
+      {(stage === 'loading' && task.type === 'undo') && (
+        <Undo2 className="h-6 w-6 text-foreground animate-spin flex-shrink-0" />
+      )}
 
-      <div className="flex items-center gap-2 min-w-0">
-        {stage === 'done-show' && (
-          <CheckCircle2 className="h-6 w-6 text-green-400" />
-        )}
-        {stage === 'undo-started' && (
-          <Undo2 className="h-6 w-6 text-foreground animate-spin" />
-        )}
-        <div className="min-w-0">
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-medium truncate">{task.description}</div>
           {(stage === 'loading' && task.type === 'bulk_add') && (
-            <div className="text-xs text-muted-foreground">{percent}%</div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="text-xs text-muted-foreground">{percent}%</div>
+              {/* Progress bar */}
+              <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+            </div>
           )}
           {(stage === 'loading' && task.type === 'undo') && (
             <div className="text-xs text-muted-foreground">Undoing...</div>
@@ -250,13 +276,15 @@ function renderToast(
           )}
         </div>
       </div>
+      
+      {/* Action buttons */}
       {stage === 'loading' && task.type === 'bulk_add' && onCancel && (
-        <Button variant="outline" size="sm" className="ml-2 text-xs" onClick={() => onCancel(task)}>
+        <Button variant="outline" size="sm" className="ml-2 text-xs flex-shrink-0" onClick={() => onCancel(task)}>
           Cancel
         </Button>
       )}
       {stage === 'undo-offer' && task.type === 'bulk_add' && task.targetCollectionId && onUndo && (
-        <Button variant="outline" size="sm" className="ml-2 text-xs" onClick={() => onUndo(task)}>
+        <Button variant="outline" size="sm" className="ml-2 text-xs flex-shrink-0" onClick={() => onUndo(task)}>
           <Undo2 className="h-3 w-3 mr-1" />
           Undo
         </Button>
