@@ -38,6 +38,10 @@ def _set_cancel_requested(r: redis.Redis, task_id: str) -> None:
     r.set(f"operation:{task_id}:cancel", "1")
 
 
+def _get_active_interactive_task_id(r: redis.Redis) -> Optional[str]:
+    return r.get("interactive:active")
+
+
 def _is_interactive_task_active(r: redis.Redis) -> bool:
     """Check if any interactive queue task is currently running"""
     return r.exists("interactive:active") > 0
@@ -190,11 +194,19 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
 
                     batch.clear()
 
-            self.update_state(
-                state=states.SUCCESS,
-                meta={"status": "completed", "current": inserted_count, "total": total, "percent": 100.0, "eta_seconds": 0},
-            )
-            return {"status": "completed", "inserted": inserted_count, "total": total}
+            # If cancellation was requested right at the end, report cancelled instead of completed
+            if _is_cancel_requested(r, task_id):
+                self.update_state(
+                    state=states.REVOKED,
+                    meta={"status": "cancelled", "current": inserted_count, "total": total},
+                )
+                return {"status": "cancelled", "inserted": inserted_count, "total": total}
+            else:
+                self.update_state(
+                    state=states.SUCCESS,
+                    meta={"status": "completed", "current": inserted_count, "total": total, "percent": 100.0, "eta_seconds": 0},
+                )
+                return {"status": "completed", "inserted": inserted_count, "total": total}
         finally:
             db_session.close()
     except Exception as exc: 

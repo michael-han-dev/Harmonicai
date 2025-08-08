@@ -63,8 +63,8 @@ def start_bulk_add(
     queue_name = "bulk" if total_items > 500 else "interactive"
     
     async_result = bulk_add_companies.apply_async(
-        args=[str(source_id), str(target_id), mode, company_ids], 
-        queue=queue_name
+        args=[str(source_id), str(target_id), mode, company_ids if mode == "selected" else None],
+        queue=queue_name,
     )
     return BatchResponse(task_id=async_result.id)
 
