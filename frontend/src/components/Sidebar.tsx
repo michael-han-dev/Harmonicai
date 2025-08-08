@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { getCollectionsMetadata } from "@/utils/jam-api";
+import useApi from "@/utils/useApi";
 
 interface SidebarItem {
   icon: React.ReactNode;
@@ -29,20 +30,14 @@ interface SidebarItem {
 const Sidebar = () => {
   const [isNetworkExpanded, setIsNetworkExpanded] = useState(true);
   const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(true);
-  const [collectionsCount, setCollectionsCount] = useState(0);
+  const { data: collections, refetch: refetchCollections } = useApi(() => getCollectionsMetadata());
+  const collectionsCount = collections?.length ?? 0;
 
   useEffect(() => {
-    const fetchCollectionsCount = async () => {
-      try {
-        const collections = await getCollectionsMetadata();
-        setCollectionsCount(collections.length);
-      } catch (error) {
-        console.error('Error fetching collections:', error);
-      }
-    };
-    
-    fetchCollectionsCount();
-  }, []);
+    const onUpdated = () => refetchCollections();
+    window.addEventListener('collections:updated', onUpdated);
+    return () => window.removeEventListener('collections:updated', onUpdated);
+  }, [refetchCollections]);
 
   const mainMenuItems: SidebarItem[] = [
     { icon: <Building2 className="w-5 h-5" />, label: "Company Search", isActive: true },

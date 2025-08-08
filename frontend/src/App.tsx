@@ -18,7 +18,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'share' | 'publish'>('share');
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showSearchCommand, setShowSearchCommand] = useState(false);
-  const { data: collectionResponse } = useApi(() => getCollectionsMetadata());
+  const { data: collectionResponse, refetch: refetchCollections } = useApi(() => getCollectionsMetadata());
 
   useEffect(() => {
     setSelectedCollectionId(collectionResponse?.[0]?.id);
@@ -48,7 +48,8 @@ function App() {
   };
 
   const handleTaskComplete = (taskId: string) => {
-    // Task completion handled by polling, no additional action needed
+    // Refresh collections so counts/names are up-to-date after background ops
+    refetchCollections();
     console.log('Task completed:', taskId);
   };
 
@@ -114,6 +115,7 @@ function App() {
                 onStartBulkTask={addBackgroundTask}
                 getCollectionName={getCollectionName}
                 onChangeCollection={setSelectedCollectionId}
+                refreshCollections={refetchCollections}
               />
             )}
         </div>

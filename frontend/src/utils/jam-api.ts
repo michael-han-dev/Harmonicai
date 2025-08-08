@@ -102,6 +102,15 @@ export async function createCollection(collection_name: string): Promise<ICollec
     }
 }
 
+export async function deleteCollection(id: string): Promise<void> {
+    try {
+        await axios.delete(`${BASE_URL}/collections/${id}`);
+    } catch (error) {
+        console.error('Error deleting collection:', error);
+        throw error;
+    }
+}
+
 // Operations API functions
 export async function startBulkAdd(
     sourceId: string,
@@ -146,6 +155,19 @@ export async function undoOperation(taskId: string, payload: IUndoRequest): Prom
         return response.data;
     } catch (error) {
         console.error('Error undoing operation:', error);
+        throw error;
+    }
+}
+
+// Delete specific companies from a collection
+export async function deleteCompaniesFromCollection(collectionId: string, companyIds: number[]): Promise<{ deleted: number }>{
+    try {
+        const response = await axios.post(`${BASE_URL}/collections/${collectionId}/companies/delete`, {
+            companyIds,
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error deleting companies from collection:', error);
         throw error;
     }
 }

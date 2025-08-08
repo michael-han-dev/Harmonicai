@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getCollectionsById, ICompany, ICollection, startBulkAdd } from "../utils/jam-api";
+import { getCollectionsById, ICompany, ICollection, startBulkAdd, deleteCompaniesFromCollection } from "../utils/jam-api";
 import { BackgroundTask } from "./BackgroundTasksManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
 import { ChevronLeft, ChevronRight, MoveRight, Heart, Trash2, SlidersHorizontal, LayoutGrid, Flag } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import { Plus, Check } from "lucide-react";
-import { createCollection } from "@/utils/jam-api";
+import { createCollection, deleteCollection } from "@/utils/jam-api";
 
 
 type SelectionMode = 'none' | 'all';
@@ -26,6 +26,7 @@ interface CompanyTableProps {
   onStartBulkTask: (task: BackgroundTask) => void;
   getCollectionName: (collectionId: string) => string;
   onChangeCollection: (collectionId: string) => void;
+  refreshCollections: () => void;
 }
 
 const CompanyTable = (props: CompanyTableProps) => {
@@ -49,6 +50,7 @@ const CompanyTable = (props: CompanyTableProps) => {
   const [industriesSelected, setIndustriesSelected] = useState<string[]>([]);
   const [sizeRanges, setSizeRanges] = useState<string[]>([]);
   const [fundingFilters, setFundingFilters] = useState<string[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // Column visibility
   const [visibleCols, setVisibleCols] = useState({
     company: true,
@@ -231,6 +233,29 @@ const CompanyTable = (props: CompanyTableProps) => {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    const ids = getSelectedCompanyIds();
+    if (selectionMode === 'all' || ids.length === 0) {
+      alert('Please select specific companies to remove.');
+      return;
+    }
+    try {
+      await deleteCompaniesFromCollection(props.selectedCollectionId, ids);
+      // Refresh current page
+      setResponse(prev => prev.filter(c => !ids.includes(c.id)));
+      setTotal(prev => Math.max(0, prev - ids.length));
+      // Clear selection
+      setSelectionMode('none');
+      setSelectedIds(new Set());
+      setExcludedIds(new Set());
+    } catch (e) {
+      console.error('Failed to delete companies:', e);
+      alert('Failed to delete from list');
+    } finally {
+      setShowDeleteConfirm(false);
+    }
+  };
+
   const industries = Array.from(new Set(response.map((c) => c.industry).filter(Boolean)));
   const withinSelectedSizes = (team: number | null | undefined) => {
     if (sizeRanges.length === 0) return true;
@@ -278,20 +303,53 @@ const CompanyTable = (props: CompanyTableProps) => {
             <DropdownMenu open={isCollectionsOpen} onOpenChange={setIsCollectionsOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="h-8 px-3 rounded-md border border-indigo-500/30">
-                  {collectionLabelOverride ?? props.getCollectionName(props.selectedCollectionId)}
+                  {props.getCollectionName(props.selectedCollectionId)}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-72 p-0" sideOffset={8} align="start">
                 <div className="max-h-72 overflow-auto">
                   {props.collectionResponse?.map(col => (
-                    <button
+                    <div
                       key={col.id}
-                      onClick={() => { props.onChangeCollection(col.id); setCollectionLabelOverride(undefined); setIsCollectionsOpen(false); }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-accent"
+                      className="group flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-accent"
                     >
-                      <div className="flex-1 truncate">{col.collection_name}</div>
-                      {col.id === props.selectedCollectionId && <Check className="w-4 h-4" />}
-                    </button>
+                      <button
+                        className="flex-1 truncate text-left"
+                        onClick={() => { props.onChangeCollection(col.id); setCollectionLabelOverride(undefined); setIsCollectionsOpen(false); }}
+                      >
+                        {col.collection_name}
+                      </button>
+                      <div className="relative w-4 h-4">
+                        {col.id === props.selectedCollectionId && (
+                          <Check className="w-4 h-4 absolute inset-0 transition-opacity opacity-100 group-hover:opacity-0" />
+                        )}
+                        <button
+                          className="absolute inset-0 transition-opacity opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-600"
+                          title={`Delete ${col.collection_name}`}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const confirmed = window.confirm(`Are you sure you want to delete "${col.collection_name}"?`);
+                            if (!confirmed) return;
+                            try {
+                              await deleteCollection(col.id);
+                              props.refreshCollections();
+                              window.dispatchEvent(new Event('collections:updated'));
+                              if (col.id === props.selectedCollectionId) {
+                                const next = props.collectionResponse?.find(c => c.id !== col.id);
+                                if (next) {
+                                  props.onChangeCollection(next.id);
+                                  setCollectionLabelOverride(undefined);
+                                }
+                              }
+                            } catch (err) {
+                              alert('Failed to delete collection');
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </DropdownMenuContent>
@@ -328,6 +386,9 @@ const CompanyTable = (props: CompanyTableProps) => {
                       disabled={!createName.trim()}
                       onClick={async ()=>{
                         const created = await createCollection(createName.trim());
+                        // Refresh global collections so new collection appears everywhere immediately
+                        props.refreshCollections();
+                        window.dispatchEvent(new Event('collections:updated'));
                         if (createIncludeSelected && getSelectedCount() > 0) {
                           const mode = selectionMode === 'all' ? 'all' : 'selected';
                           const companyIds = getSelectedCompanyIds();
@@ -529,10 +590,25 @@ const CompanyTable = (props: CompanyTableProps) => {
                     </button>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                {/* Delete Button */}
-                <Button size="icon" variant="outline" className="h-7 w-7" title="Remove from List">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {/* Delete Button with confirm */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="outline" className="h-7 w-7" title="Remove from List" onClick={() => setShowDeleteConfirm(true)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  {showDeleteConfirm && (
+                    <DropdownMenuContent className="w-64 p-3" sideOffset={8} align="end">
+                      <div className="space-y-3">
+                        <div className="text-sm">Are you sure you want to delete these companies from this list?</div>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setShowDeleteConfirm(false)}>No</Button>
+                          <Button size="sm" onClick={handleDeleteSelected}>Yes</Button>
+                        </div>
+                      </div>
+                    </DropdownMenuContent>
+                  )}
+                </DropdownMenu>
               </div>
             )}
           </div>
