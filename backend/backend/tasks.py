@@ -38,6 +38,23 @@ def _set_cancel_requested(r: redis.Redis, task_id: str) -> None:
     r.set(f"operation:{task_id}:cancel", "1")
 
 
+def _is_interactive_task_active(r: redis.Redis) -> bool:
+    """Check if any interactive queue task is currently running"""
+    return r.exists("interactive:active") > 0
+
+
+def _set_interactive_task_active(r: redis.Redis, task_id: str) -> None:
+    """Mark an interactive task as active"""
+    r.set("interactive:active", task_id, ex=3600)  # Expire after 1 hour as safety
+
+
+def _clear_interactive_task_active(r: redis.Redis, task_id: str) -> None:
+    """Clear interactive task marker if this task set it"""
+    current = r.get("interactive:active")
+    if current == task_id:
+        r.delete("interactive:active")
+
+
 def _store_inserted_ids(r: redis.Redis, task_id: str, company_ids: Iterable[int]) -> None:
     if not company_ids:
         return
@@ -84,7 +101,7 @@ def _compute_delta_ids(
     return delta_ids
 
 
-@celery_app.task(bind=True, name="bulk_add_companies", queue="bulk")
+@celery_app.task(bind=True, name="bulk_add_companies")
 def bulk_add_companies(self, source_collection_id: str, target_collection_id: str, mode: str, company_ids: Optional[List[int]] = None):
     r = _get_redis_client()
     task_id = self.request.id
@@ -117,6 +134,28 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
                         meta={"status": "cancelled", "current": inserted_count, "total": total},
                     )
                     return {"status": "cancelled", "inserted": inserted_count, "total": total}
+
+                # Check if interactive task is active and pause if so
+                if _is_interactive_task_active(r):
+                    self.update_state(
+                        state=states.STARTED,
+                        meta={"status": "paused", "current": inserted_count, "total": total, "message": "Paused for interactive task"}
+                    )
+                    # Wait until interactive task finishes
+                    import time
+                    while _is_interactive_task_active(r) and not _is_cancel_requested(r, task_id):
+                        time.sleep(1)
+                    if _is_cancel_requested(r, task_id):
+                        self.update_state(
+                            state=states.REVOKED,
+                            meta={"status": "cancelled", "current": inserted_count, "total": total},
+                        )
+                        return {"status": "cancelled", "inserted": inserted_count, "total": total}
+                    # Resume
+                    self.update_state(
+                        state=states.STARTED,
+                        meta={"status": "resumed", "current": inserted_count, "total": total, "message": "Resuming after interactive task"}
+                    )
 
                 association = database.CompanyCollectionAssociation(
                     company_id=company_id, collection_id=target_collection_id
@@ -167,9 +206,14 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
             _release_collection_lock(r, target_collection_id, task_id)
 
 
-@celery_app.task(bind=True, name="undo_bulk_add", queue="interactive")
+@celery_app.task(bind=True, name="undo_bulk_add")
 def undo_bulk_add(self, target_collection_id: str, task_id_to_undo: str):
     r = _get_redis_client()
+    task_id = self.request.id
+    
+    # Mark this interactive task as active to pause bulk operations
+    _set_interactive_task_active(r, task_id)
+    
     db_session = database.SessionLocal()
     try:
         inserted_ids = _fetch_inserted_ids(r, task_id_to_undo)
@@ -196,4 +240,38 @@ def undo_bulk_add(self, target_collection_id: str, task_id_to_undo: str):
         raise
     finally:
         db_session.close()
+        # Clear interactive task marker
+        _clear_interactive_task_active(r, task_id)
+
+
+@celery_app.task(bind=True, name="interactive_operation")
+def interactive_operation(self, operation_type: str, **kwargs):
+    """Generic wrapper for interactive operations that need to pause bulk tasks"""
+    r = _get_redis_client()
+    task_id = self.request.id
+    
+    # Mark this interactive task as active to pause bulk operations
+    _set_interactive_task_active(r, task_id)
+    
+    try:
+        self.update_state(state=states.STARTED, meta={"status": "running", "operation": operation_type})
+        
+        # Simulate the actual work here - replace with real operations
+        if operation_type == "delete_companies":
+            # Example: delete companies from collection
+            import time
+            time.sleep(2)  # Simulate work
+            result = {"status": "completed", "deleted": kwargs.get("count", 0)}
+        else:
+            result = {"status": "completed", "message": f"{operation_type} completed"}
+            
+        self.update_state(state=states.SUCCESS, meta=result)
+        return result
+    except Exception as exc:
+        logger.exception("interactive_operation failed: %s", exc)
+        self.update_state(state=states.FAILURE, meta={"status": "failed", "message": str(exc)})
+        raise
+    finally:
+        # Always clear interactive task marker
+        _clear_interactive_task_active(r, task_id)
 

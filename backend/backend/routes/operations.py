@@ -46,13 +46,26 @@ def start_bulk_add(
     source_id: uuid.UUID,
     target_id: uuid.UUID,
     payload: BatchRequest,
+    db: Session = Depends(database.get_db),
 ):
     mode = payload.mode
     company_ids = payload.companyIds or []
     if mode == "selected" and not company_ids:
         raise HTTPException(status_code=400, detail="companyIds required when mode is 'selected'")
 
-    async_result = bulk_add_companies.apply_async(args=[str(source_id), str(target_id), mode, company_ids], queue="bulk")
+    # Determine queue based on estimated work size
+    from backend.tasks import _compute_delta_ids
+    selected = None if mode == "all" else company_ids
+    delta_ids = _compute_delta_ids(db, str(source_id), str(target_id), selected)
+    total_items = len(delta_ids)
+    
+    # Route to appropriate queue: >2000 items = bulk queue, ≤2000 = interactive queue
+    queue_name = "bulk" if total_items > 2000 else "interactive"
+    
+    async_result = bulk_add_companies.apply_async(
+        args=[str(source_id), str(target_id), mode, company_ids], 
+        queue=queue_name
+    )
     return BatchResponse(task_id=async_result.id)
 
 

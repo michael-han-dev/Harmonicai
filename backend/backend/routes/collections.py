@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
+from typing import Optional, List
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -85,7 +86,10 @@ def get_company_collection_by_id(
 
 
 class DeleteCompaniesRequest(BaseModel):
-    companyIds: list[int]
+    # Use Optional[...] for Python 3.9 compatibility (no PEP 604 `|`)
+    mode: Optional[str] = "selected"
+    companyIds: Optional[List[int]] = None
+    excludeIds: Optional[List[int]] = None
 
 
 @router.post("/{collection_id}/companies/delete")
@@ -94,13 +98,24 @@ def delete_companies_from_collection(
     payload: DeleteCompaniesRequest,
     db: Session = Depends(database.get_db),
 ):
-    if not payload.companyIds:
-        return {"deleted": 0}
+    mode = (payload.mode or "selected").lower()
+    q = db.query(database.CompanyCollectionAssociation).filter(
+        database.CompanyCollectionAssociation.collection_id == collection_id
+    )
 
+    if mode == "all":
+        if payload.excludeIds:
+            q = q.filter(~database.CompanyCollectionAssociation.company_id.in_(payload.excludeIds))
+        deleted = q.delete(synchronize_session=False)
+        db.commit()
+        return {"deleted": int(deleted)}
+
+    # default: selected
+    company_ids = payload.companyIds or []
+    if not company_ids:
+        return {"deleted": 0}
     deleted = (
-        db.query(database.CompanyCollectionAssociation)
-        .filter(database.CompanyCollectionAssociation.collection_id == collection_id)
-        .filter(database.CompanyCollectionAssociation.company_id.in_(payload.companyIds))
+        q.filter(database.CompanyCollectionAssociation.company_id.in_(company_ids))
         .delete(synchronize_session=False)
     )
     db.commit()
