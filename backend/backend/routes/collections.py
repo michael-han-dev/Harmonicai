@@ -41,6 +41,19 @@ def get_all_collection_metadata(
     ]
 
 
+class CreateCollectionRequest(BaseModel):
+    collection_name: str
+
+
+@router.post("", response_model=CompanyCollectionMetadata)
+def create_collection(payload: CreateCollectionRequest, db: Session = Depends(database.get_db)):
+    new_collection = database.CompanyCollection(collection_name=payload.collection_name)
+    db.add(new_collection)
+    db.commit()
+    db.refresh(new_collection)
+    return CompanyCollectionMetadata(id=new_collection.id, collection_name=new_collection.collection_name)
+
+
 @router.get("/{collection_id}", response_model=CompanyCollectionOutput)
 def get_company_collection_by_id(
     collection_id: uuid.UUID,
