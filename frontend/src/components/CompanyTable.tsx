@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { getCollectionsById, ICompany, ICollection, startBulkAdd, deleteCompaniesFromCollection } from "../utils/jam-api";
+import { useEffect, useRef, useState } from "react";
+import { getCollectionsById, ICompany, ICollection, startBulkAdd, deleteCompaniesFromCollection, ICollectionMeta } from "../utils/jam-api";
 import { BackgroundTask } from "./BackgroundTasksManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ type SelectionMode = 'none' | 'all';
 
 interface CompanyTableProps {
   selectedCollectionId: string;
-  collectionResponse?: ICollection[];
+  collectionResponse?: (ICollectionMeta | ICollection)[];
   onStartBulkTask: (task: BackgroundTask) => void;
   getCollectionName: (collectionId: string) => string;
   onChangeCollection: (collectionId: string) => void;
@@ -62,6 +62,7 @@ const CompanyTable = (props: CompanyTableProps) => {
   // Note: depends on sizeRanges; compute after its declaration
   const [response, setResponse] = useState<ICompany[]>([]);
   const [allCompanies, setAllCompanies] = useState<ICompany[]>([]);
+  const allCacheRef = useRef<Map<string, ICompany[]>>(new Map());
   const [total, setTotal] = useState<number>(0);
   const [offset, setOffset] = useState<number>(0);
   const [pageSize] = useState(25);
@@ -158,7 +159,7 @@ const CompanyTable = (props: CompanyTableProps) => {
     return data;
   };
 
-  useEffect(() => {
+  const fetchData = async () => {
     setIsLoading(true);
     const params: Record<string, any> = {
       offset,
@@ -170,19 +171,39 @@ const CompanyTable = (props: CompanyTableProps) => {
     if (sizeRanges.length > 0) params.sizeRanges = sizeRanges;
     if (filterLikedOnly) params.liked_only = true;
 
-    getCollectionsById(props.selectedCollectionId, params).then((newResponse) => {
-      setResponse(newResponse.companies);
-      setTotal(newResponse.total);
-      setIsLoading(false);
-      // fetch the entire list (for stable pin-to-top across all results)
+    const newResponse = await getCollectionsById(props.selectedCollectionId, params);
+    setResponse(newResponse.companies);
+    setTotal(newResponse.total);
+    if (offset > 0 && offset >= newResponse.total) {
+      // If the current page is beyond the new total (e.g., after deletions), reset to first page
+      setOffset(0);
+    }
+    // show first page immediately
+    setIsLoading(false);
+    // fetch the entire list in background (do not block UI) with simple memo cache
+    if (newResponse.total > 0) {
+      setAllCompanies((prev) => (prev.length ? prev : newResponse.companies));
+      const key = JSON.stringify({ id: props.selectedCollectionId, q: { ...params, offset: 0, limit: newResponse.total } });
+      const cached = allCacheRef.current.get(key);
+      if (cached) {
+        setAllCompanies(cached);
+        return;
+      }
       const allParams: Record<string, any> = { ...params, offset: 0, limit: newResponse.total };
-      getCollectionsById(props.selectedCollectionId, allParams).then((allResp) => {
-        setAllCompanies(allResp.companies);
-      }).catch(() => {
-        // fallback to current page only if full list fails
-        setAllCompanies(newResponse.companies);
-      });
-    });
+      getCollectionsById(props.selectedCollectionId, allParams)
+        .then((allResp) => {
+          setAllCompanies(allResp.companies);
+          allCacheRef.current.set(key, allResp.companies);
+        })
+        .catch(() => {
+        });
+    } else {
+      setAllCompanies([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
   }, [props.selectedCollectionId, offset, pageSize, filterText, industriesSelected, fundingFilters, sizeRanges, filterLikedOnly]);
 
   useEffect(() => {
@@ -303,7 +324,7 @@ const CompanyTable = (props: CompanyTableProps) => {
         sourceCollectionName: props.getCollectionName(props.selectedCollectionId),
         targetCollectionName: targetName,
         targetCollectionId,
-        description: `Assigning ${mode === 'all' ? 'all' : getSelectedCount()} companies to ${targetName}`,
+        description: `Adding ${mode === 'all' ? 'all' : getSelectedCount()} companies to ${targetName}`,
         startTime: new Date(),
       };
 
@@ -345,7 +366,7 @@ const CompanyTable = (props: CompanyTableProps) => {
         sourceCollectionName: props.getCollectionName(props.selectedCollectionId),
         targetCollectionName: likedCollection.collection_name,
         targetCollectionId: likedCollection.id,
-        description: `Adding ${mode === 'all' ? 'all' : getSelectedCount()} companies to ${likedCollection.collection_name}`,
+        description: `Moved ${mode === 'all' ? 'all' : getSelectedCount()} companies to ${likedCollection.collection_name}`,
         startTime: new Date(),
       };
 
@@ -377,11 +398,7 @@ const CompanyTable = (props: CompanyTableProps) => {
       }
       // Refresh current page
       // For simplicity, refetch current page data
-      setIsLoading(true);
-      const refreshed = await getCollectionsById(props.selectedCollectionId, offset, pageSize);
-      setResponse(refreshed.companies);
-      setTotal(refreshed.total);
-      setIsLoading(false);
+      await fetchData();
       // Clear selection
       setSelectionMode('none');
       setSelectedIds(new Set());
@@ -398,6 +415,7 @@ const CompanyTable = (props: CompanyTableProps) => {
   const baseList = (allCompanies && allCompanies.length > 0) ? allCompanies : response;
   const orderedAll = applySorting(baseList);
   const visibleCompanies = orderedAll.slice(offset, Math.min(offset + pageSize, orderedAll.length));
+  const isEmpty = total === 0 || orderedAll.length === 0;
 
   // Flagging state: map of companyId -> end label
   const [flaggedEndById, setFlaggedEndById] = useState<Map<number, string>>(new Map());
@@ -425,6 +443,9 @@ const CompanyTable = (props: CompanyTableProps) => {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="h-8 px-3 rounded-md border border-indigo-500/30">
                   {props.getCollectionName(props.selectedCollectionId)}
+                  {typeof total === 'number' && (
+                    <span className="ml-2 text-xs text-muted-foreground">{total}</span>
+                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-72 p-0" sideOffset={8} align="start">
@@ -439,6 +460,9 @@ const CompanyTable = (props: CompanyTableProps) => {
                         onClick={() => { props.onChangeCollection(col.id); setIsCollectionsOpen(false); }}
                       >
                         {col.collection_name}
+                        {typeof (col as any).count === 'number' && (
+                          <span className="ml-2 text-xs text-muted-foreground">{(col as any).count}</span>
+                        )}
                       </button>
                       <div className="relative w-4 h-4">
                         {col.id === props.selectedCollectionId && (
@@ -462,7 +486,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                                 }
                               }
                             } catch (err) {
-                              alert('Failed to delete collection');
+                              alert('You need to stop adding companies to this collection to delete it.');
                             }
                           }}
                         >
@@ -726,7 +750,7 @@ const CompanyTable = (props: CompanyTableProps) => {
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 p-0 overflow-hidden">
+      <CardContent className="flex-1 p-0 overflow-hidden flex flex-col">
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
             <div className="text-muted-foreground">Loading companies...</div>
@@ -734,6 +758,11 @@ const CompanyTable = (props: CompanyTableProps) => {
         ) : (
           <>
             <div className="flex-1 overflow-auto">
+              {isEmpty ? (
+                <div className="flex justify-center items-center h-full">
+                  <div className="text-muted-foreground">This collection is empty.</div>
+                </div>
+              ) : (
               <Table className="w-full table-fixed">
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="h-10 [&>th]:py-0">
@@ -856,6 +885,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                   )})}
                 </TableBody>
               </Table>
+              )}
             </div>
             
             {/* Pagination */}
@@ -880,7 +910,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                   variant="outline"
                   size="sm"
                   onClick={() => setOffset(offset + pageSize)}
-                  disabled={offset + pageSize >= total}
+                  disabled={offset + pageSize >= total || total === 0}
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />

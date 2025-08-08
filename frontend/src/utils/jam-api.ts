@@ -17,6 +17,12 @@ export interface ICollection {
     total: number;
 }
 
+export interface ICollectionMeta {
+    id: string;
+    collection_name: string;
+    count?: number;
+}
+
 export interface ICompanyBatchResponse {
     companies: ICompany[];
 }
@@ -107,7 +113,7 @@ export async function getCollectionsById(
     }
 }
 
-export async function getCollectionsMetadata(): Promise<ICollection[]> {
+export async function getCollectionsMetadata(): Promise<ICollectionMeta[]> {
     try {
         const response = await axios.get(`${BASE_URL}/collections`);
         return response.data;

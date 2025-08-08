@@ -3,7 +3,7 @@ import "./App.css";
 import Sidebar from "./components/Sidebar";
 import CompanyTable from "./components/CompanyTable";
 import BackgroundTasksManager, { BackgroundTask } from "./components/BackgroundTasksManager";
-import { getCollectionsMetadata } from "./utils/jam-api";
+import { getCollectionsMetadata, ICollectionMeta } from "./utils/jam-api";
 import useApi from "./utils/useApi";
 
 import ThemeToggle from "@/components/ui/ThemeToggle";
@@ -18,7 +18,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'share' | 'publish'>('share');
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showSearchCommand, setShowSearchCommand] = useState(false);
-  const { data: collectionResponse, refetch: refetchCollections } = useApi(() => getCollectionsMetadata());
+  const { data: collectionResponse, refetch: refetchCollections } = useApi<ICollectionMeta[]>(() => getCollectionsMetadata());
   // Restore background tasks after refresh so popups persist across reloads
   useEffect(() => {
     try {
