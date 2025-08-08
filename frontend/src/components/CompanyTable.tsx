@@ -16,6 +16,7 @@ import { ChevronLeft, ChevronRight, MoveRight, Heart, Trash2, SlidersHorizontal,
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import { Plus, Check } from "lucide-react";
 import { createCollection, deleteCollection } from "@/utils/jam-api";
+import ColumnFilterMenu, { SortAction } from "@/components/ColumnFilterMenu";
 
 
 type SelectionMode = 'none' | 'all';
@@ -60,6 +61,7 @@ const CompanyTable = (props: CompanyTableProps) => {
   };
   // Note: depends on sizeRanges; compute after its declaration
   const [response, setResponse] = useState<ICompany[]>([]);
+  const [allCompanies, setAllCompanies] = useState<ICompany[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [offset, setOffset] = useState<number>(0);
   const [pageSize] = useState(25);
@@ -71,7 +73,6 @@ const CompanyTable = (props: CompanyTableProps) => {
   const [isCollectionsOpen, setIsCollectionsOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
-  const [createIncludeSelected, setCreateIncludeSelected] = useState(false);
   // Row Filters
   const [filterText, setFilterText] = useState<string>("");
   const [filterLikedOnly, setFilterLikedOnly] = useState<boolean>(false);
@@ -93,6 +94,70 @@ const CompanyTable = (props: CompanyTableProps) => {
   });
   const toggleCol = (key: keyof typeof visibleCols) => setVisibleCols((p) => ({ ...p, [key]: !p[key] }));
 
+  type ColumnKey = 'company' | 'industry' | 'teamSize' | 'funding' | 'founded';
+  const [columnSort, setColumnSort] = useState<{ column: ColumnKey; action: SortAction | null } | null>(null);
+
+  const FOUNDED_YEARS = Array.from({ length: 2025 - 2018 + 1 }, (_, i) => String(2025 - i));
+
+  const compareBySequence = (a: string, b: string, sequence: string[], reverse = false) => {
+    const ai = sequence.indexOf(a);
+    const bi = sequence.indexOf(b);
+    const max = sequence.length + 1;
+    const av = ai === -1 ? max : ai;
+    const bv = bi === -1 ? max : bi;
+    return reverse ? bv - av : av - bv;
+  };
+
+  const applySorting = (data: ICompany[]): ICompany[] => {
+    if (!columnSort || !columnSort.action) return data;
+    const { column, action } = columnSort;
+    const copy = data.slice();
+    const tiebreak = (x: ICompany, y: ICompany) => x.company_name.localeCompare(y.company_name);
+
+    if (column === 'company' && action.type === 'alpha') {
+      return copy.sort((a, b) => action.dir === 'asc' ? a.company_name.localeCompare(b.company_name) : b.company_name.localeCompare(a.company_name));
+    }
+    // founded: support numeric sort or pin specific year to top
+    if (column === 'founded') {
+      if (action.type === 'numeric') {
+        return copy.sort((a, b) => action.dir === 'asc' ? a.founded_year - b.founded_year : b.founded_year - a.founded_year || tiebreak(a, b));
+      }
+      if (action.type === 'pin') {
+        const year = Number((action as any).value);
+        const pinned: ICompany[] = [];
+        const others: ICompany[] = [];
+        data.forEach((c) => (c.founded_year === year ? pinned.push(c) : others.push(c)));
+        return [...pinned, ...others];
+      }
+    }
+    if (column === 'teamSize' && (action.type === 'numeric')) {
+      return copy.sort((a, b) => action.dir === 'asc' ? a.team_size - b.team_size : b.team_size - a.team_size || tiebreak(a, b));
+    }
+    if (column === 'funding') {
+      if (action.type === 'pin') {
+        const pinned: ICompany[] = [];
+        const others: ICompany[] = [];
+        data.forEach((c) => (c.funding_round === (action as any).value ? pinned.push(c) : others.push(c)));
+        return [...pinned, ...others];
+      }
+      if (action.type === 'sequence') {
+        return copy.sort((a, b) => compareBySequence(a.funding_round, b.funding_round, [...FUNDING_ORDER]) || tiebreak(a, b));
+      }
+      if (action.type === 'reverse') {
+        return copy.sort((a, b) => compareBySequence(a.funding_round, b.funding_round, [...FUNDING_ORDER], true) || tiebreak(a, b));
+      }
+    }
+    if (column === 'industry') {
+      if (action.type === 'pin') {
+        const pinned: ICompany[] = [];
+        const others: ICompany[] = [];
+        data.forEach((c) => (c.industry === (action as any).value ? pinned.push(c) : others.push(c)));
+        return [...pinned, ...others];
+      }
+    }
+    return data;
+  };
+
   useEffect(() => {
     setIsLoading(true);
     const params: Record<string, any> = {
@@ -109,6 +174,14 @@ const CompanyTable = (props: CompanyTableProps) => {
       setResponse(newResponse.companies);
       setTotal(newResponse.total);
       setIsLoading(false);
+      // fetch the entire list (for stable pin-to-top across all results)
+      const allParams: Record<string, any> = { ...params, offset: 0, limit: newResponse.total };
+      getCollectionsById(props.selectedCollectionId, allParams).then((allResp) => {
+        setAllCompanies(allResp.companies);
+      }).catch(() => {
+        // fallback to current page only if full list fails
+        setAllCompanies(newResponse.companies);
+      });
     });
   }, [props.selectedCollectionId, offset, pageSize, filterText, industriesSelected, fundingFilters, sizeRanges, filterLikedOnly]);
 
@@ -117,6 +190,18 @@ const CompanyTable = (props: CompanyTableProps) => {
     setSelectionMode('none');
     setSelectedIds(new Set());
     setExcludedIds(new Set());
+  }, [props.selectedCollectionId]);
+
+  // Listen for live count increments from background bulk operations
+  useEffect(() => {
+    const onIncrement = (e: Event) => {
+      const custom = e as CustomEvent<{ collectionId: string; amount: number }>;
+      if (custom.detail?.collectionId === props.selectedCollectionId) {
+        setTotal((prev) => prev + (custom.detail.amount || 0));
+      }
+    };
+    window.addEventListener('collection:count-increment' as any, onIncrement as any);
+    return () => window.removeEventListener('collection:count-increment' as any, onIncrement as any);
   }, [props.selectedCollectionId]);
 
   const currentPage = Math.floor(offset / pageSize) + 1;
@@ -310,7 +395,9 @@ const CompanyTable = (props: CompanyTableProps) => {
   };
 
   // Industry options are static to avoid changing as pages/filters change
-  const visibleCompanies = response;
+  const baseList = (allCompanies && allCompanies.length > 0) ? allCompanies : response;
+  const orderedAll = applySorting(baseList);
+  const visibleCompanies = orderedAll.slice(offset, Math.min(offset + pageSize, orderedAll.length));
 
   // Flagging state: map of companyId -> end label
   const [flaggedEndById, setFlaggedEndById] = useState<Map<number, string>>(new Map());
@@ -404,16 +491,9 @@ const CompanyTable = (props: CompanyTableProps) => {
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
                     />
                   </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={createIncludeSelected}
-                      onCheckedChange={(v)=>setCreateIncludeSelected(Boolean(v))}
-                      disabled={getSelectedCount() === 0}
-                    />
-                    Include currently selected companies{getSelectedCount() > 0 ? ` (${getSelectedCount()})` : ''}
-                  </label>
+
                   <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" className="h-8 px-3" onClick={()=>{ setIsCreateOpen(false); setCreateName(""); setCreateIncludeSelected(false); }}>Cancel</Button>
+                    <Button variant="outline" className="h-8 px-3" onClick={()=>{ setIsCreateOpen(false); setCreateName(""); }}>Cancel</Button>
                     <Button
                       className="h-8 px-3"
                       disabled={!createName.trim()}
@@ -422,14 +502,14 @@ const CompanyTable = (props: CompanyTableProps) => {
                         // Refresh global collections so new collection appears everywhere immediately
                         props.refreshCollections();
                         window.dispatchEvent(new Event('collections:updated'));
-                        if (createIncludeSelected && getSelectedCount() > 0) {
+                        if (getSelectedCount() > 0) {
                           const mode = selectionMode === 'all' ? 'all' : 'selected';
                           const companyIds = getSelectedCompanyIds();
                           await startBulkAdd(props.selectedCollectionId, created.id, { mode, companyIds: mode==='selected' ? companyIds : undefined });
                         }
                         setIsCreateOpen(false);
                         setCreateName("");
-                        setCreateIncludeSelected(false);
+
                         props.onChangeCollection(created.id);
                       }}
                     >
@@ -661,16 +741,83 @@ const CompanyTable = (props: CompanyTableProps) => {
                       <Checkbox
                         checked={
                           selectionMode === 'all' || 
-                          (response.length > 0 && response.every(c => isCompanySelected(c.id)))
+                          (visibleCompanies.length > 0 && visibleCompanies.every(c => isCompanySelected(c.id)))
                         }
                         onCheckedChange={handleSelectAll}
                       />
                     </TableHead>
-                    {visibleCols.company && (<TableHead className="w-64 text-left h-10 align-middle border-r border-border">Company</TableHead>)}
-                    {visibleCols.industry && (<TableHead className="w-48 text-left h-10 align-middle border-r border-border">Industry</TableHead>)}
-                    {visibleCols.teamSize && (<TableHead className="w-24 text-left h-10 align-middle border-r border-border">Team Size</TableHead>)}
-                    {visibleCols.funding && (<TableHead className="w-32 text-left h-10 align-middle border-r border-border">Funding</TableHead>)}
-                    {visibleCols.founded && (<TableHead className="w-24 text-left h-10 align-middle">Founded</TableHead>)}
+                    {visibleCols.company && (
+                      <TableHead className="w-64 text-left h-10 align-middle border-r border-border">
+                        <div className="flex items-center justify-between gap-2 group">
+                          <span>Company</span>
+                          <ColumnFilterMenu
+                            variant="alpha"
+                            label="Company"
+                            active={columnSort?.column === 'company' ? columnSort.action ?? undefined : undefined}
+                            onChange={(a)=> setColumnSort({ column: 'company', action: a })}
+                          />
+                        </div>
+                      </TableHead>
+                    )}
+                    {visibleCols.industry && (
+                      <TableHead className="w-48 text-left h-10 align-middle border-r border-border">
+                        <div className="flex items-center justify-between gap-2 group">
+                          <span>Industry</span>
+                          <ColumnFilterMenu
+                            variant="categorical"
+                            label="Industry"
+                            sequence={ALL_INDUSTRIES}
+                            showSequence={false}
+                            showReverse={false}
+                            active={columnSort?.column === 'industry' ? columnSort.action ?? undefined : undefined}
+                            onChange={(a)=> setColumnSort({ column: 'industry', action: a })}
+                          />
+                        </div>
+                      </TableHead>
+                    )}
+                    {visibleCols.teamSize && (
+                      <TableHead className="w-24 text-left h-10 align-middle border-r border-border">
+                        <div className="flex items-center justify-between gap-2 group">
+                          <span>Team Size</span>
+                          <ColumnFilterMenu
+                            variant="numeric"
+                            label="Team Size"
+                            active={columnSort?.column === 'teamSize' ? columnSort.action ?? undefined : undefined}
+                            onChange={(a)=> setColumnSort({ column: 'teamSize', action: a })}
+                          />
+                        </div>
+                      </TableHead>
+                    )}
+                    {visibleCols.funding && (
+                      <TableHead className="w-32 text-left h-10 align-middle border-r border-border">
+                        <div className="flex items-center justify-between gap-2 group">
+                          <span>Funding</span>
+                          <ColumnFilterMenu
+                            variant="categorical"
+                            label="Funding"
+                            sequence={[...FUNDING_ORDER] as unknown as string[]}
+                            active={columnSort?.column === 'funding' ? columnSort.action ?? undefined : undefined}
+                            onChange={(a)=> setColumnSort({ column: 'funding', action: a })}
+                          />
+                        </div>
+                      </TableHead>
+                    )}
+                    {visibleCols.founded && (
+                      <TableHead className="w-24 text-left h-10 align-middle">
+                        <div className="flex items-center justify-between gap-2 group">
+                          <span>Founded</span>
+                          <ColumnFilterMenu
+                            variant="categorical"
+                            label="Founded"
+                            sequence={FOUNDED_YEARS}
+                            showSequence={false}
+                            showReverse={false}
+                            active={columnSort?.column === 'founded' ? columnSort.action ?? undefined : undefined}
+                            onChange={(a)=> setColumnSort({ column: 'founded', action: a })}
+                          />
+                        </div>
+                      </TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>

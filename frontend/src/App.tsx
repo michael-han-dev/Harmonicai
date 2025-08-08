@@ -43,8 +43,22 @@ function App() {
   }, [backgroundTasks]);
 
 
+  // On initial load, restore selected collection from URL or localStorage
   useEffect(() => {
-    setSelectedCollectionId(collectionResponse?.[0]?.id);
+    const params = new URLSearchParams(window.location.search);
+    const urlId = params.get('collection') || undefined;
+    const storedId = localStorage.getItem('harmonic.selectedCollectionId') || undefined;
+    const initial = urlId ?? storedId;
+    if (initial) setSelectedCollectionId(initial);
+  }, []);
+
+  // When collections metadata loads/changes, validate current selection or default to first
+  useEffect(() => {
+    if (!collectionResponse || collectionResponse.length === 0) return;
+    setSelectedCollectionId((current) => {
+      const exists = current && collectionResponse.some((c) => c.id === current);
+      return exists ? current : collectionResponse[0].id;
+    });
   }, [collectionResponse]);
 
   // Global keyboard shortcut for search
@@ -75,6 +89,7 @@ function App() {
   useEffect(() => {
     if (selectedCollectionId) {
       window.history.pushState({}, "", `?collection=${selectedCollectionId}`);
+      try { localStorage.setItem('harmonic.selectedCollectionId', selectedCollectionId); } catch {}
     }
   }, [selectedCollectionId]);
 
