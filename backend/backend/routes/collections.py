@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -82,3 +82,43 @@ def get_company_collection_by_id(
         companies=companies,
         total=total_count,
     )
+
+
+class DeleteCompaniesRequest(BaseModel):
+    companyIds: list[int]
+
+
+@router.post("/{collection_id}/companies/delete")
+def delete_companies_from_collection(
+    collection_id: uuid.UUID,
+    payload: DeleteCompaniesRequest,
+    db: Session = Depends(database.get_db),
+):
+    if not payload.companyIds:
+        return {"deleted": 0}
+
+    deleted = (
+        db.query(database.CompanyCollectionAssociation)
+        .filter(database.CompanyCollectionAssociation.collection_id == collection_id)
+        .filter(database.CompanyCollectionAssociation.company_id.in_(payload.companyIds))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"deleted": int(deleted)}
+
+
+@router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_collection(collection_id: uuid.UUID, db: Session = Depends(database.get_db)):
+    collection = db.query(database.CompanyCollection).get(collection_id)
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    # Delete associations first, then the collection
+    (
+        db.query(database.CompanyCollectionAssociation)
+        .filter(database.CompanyCollectionAssociation.collection_id == collection_id)
+        .delete(synchronize_session=False)
+    )
+    db.delete(collection)
+    db.commit()
+    return None
