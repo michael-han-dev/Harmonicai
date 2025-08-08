@@ -30,6 +30,18 @@ function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setShowSearchCommand(true);
+      } else if (
+        e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
+      ) {
+        // Don't trigger when typing in inputs or editable elements
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName?.toLowerCase();
+        const isEditable =
+          !!target && (target.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select');
+        if (!isEditable) {
+          e.preventDefault();
+          setShowSearchCommand(true);
+        }
       }
     };
 
