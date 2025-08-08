@@ -78,13 +78,15 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
                 }, 3000);
               }, 2000);
             } else {
-              // Interactive undo completes: show check for 3s then hide
+              // Interactive undo completes: show check for 2s then hide immediately
               setUiStageByTask(prev => ({ ...prev, [task.taskId]: 'done-show' }));
               setTimeout(() => {
                 setUiStageByTask(prev2 => ({ ...prev2, [task.taskId]: 'hidden' }));
-                // Clean up local ephemeral record once hidden
+              }, 2000);
+              // Clean up ephemeral record immediately after marking as hidden
+              setTimeout(() => {
                 setEphemeralTasks(prev => prev.filter(t => t.taskId !== task.taskId));
-              }, 3000);
+              }, 2100);
             }
           } else {
             // Ensure loading stage when polling resumes after a refresh
@@ -204,25 +206,25 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
 const HarmonicLoader = ({ className = "" }: { className?: string }) => (
   <div className={`relative ${className}`}>
     {/* Outer rotating ring */}
-    <div className="absolute inset-0 rounded-full border-2 border-primary/30 animate-spin" 
+    <div className="absolute inset-0 rounded-full border-2 border-primary/15 group-hover:border-primary/30 animate-spin transition-colors duration-300" 
          style={{ animation: 'spin 3s linear infinite' }} />
     
     {/* Inner pulsing ring */}
-    <div className="absolute inset-1 rounded-full border border-primary/60 animate-pulse" />
+    <div className="absolute inset-1 rounded-full border border-primary/30 group-hover:border-primary/60 animate-pulse transition-colors duration-300" />
     
     {/* Core harmonic symbol */}
     <div className="absolute inset-0 flex items-center justify-center">
-      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" 
+      <div className="w-2 h-2 rounded-full bg-primary/50 group-hover:bg-primary animate-pulse transition-colors duration-300" 
            style={{ animation: 'pulse 2s ease-in-out infinite alternate' }} />
     </div>
     
     {/* Orbital dots */}
     <div className="absolute inset-0">
-      <div className="absolute top-0 left-1/2 w-1 h-1 -ml-0.5 rounded-full bg-primary/70 animate-pulse"
+      <div className="absolute top-0 left-1/2 w-1 h-1 -ml-0.5 rounded-full bg-primary/35 group-hover:bg-primary/70 animate-pulse transition-colors duration-300"
            style={{ animation: 'orbit-dot 4s ease-in-out infinite', transformOrigin: '50% 12px' }} />
-      <div className="absolute top-1/2 right-0 w-1 h-1 -mt-0.5 rounded-full bg-primary/70 animate-pulse"
+      <div className="absolute top-1/2 right-0 w-1 h-1 -mt-0.5 rounded-full bg-primary/35 group-hover:bg-primary/70 animate-pulse transition-colors duration-300"
            style={{ animation: 'orbit-dot 4s ease-in-out infinite 1s', transformOrigin: '-12px 50%' }} />
-      <div className="absolute bottom-0 left-1/2 w-1 h-1 -ml-0.5 rounded-full bg-primary/70 animate-pulse"
+      <div className="absolute bottom-0 left-1/2 w-1 h-1 -ml-0.5 rounded-full bg-primary/35 group-hover:bg-primary/70 animate-pulse transition-colors duration-300"
            style={{ animation: 'orbit-dot 4s ease-in-out infinite 2s', transformOrigin: '50% -12px' }} />
     </div>
   </div>
@@ -236,7 +238,7 @@ function renderToast(
   onUndo?: (task: BackgroundTask) => void
 ) {
   return (
-    <div className="relative inline-flex items-center gap-3 bg-background/90 backdrop-blur px-4 py-3 rounded-lg shadow-lg border border-border">
+    <div className="group relative inline-flex items-center gap-3 bg-background/10 backdrop-blur px-4 py-3 rounded-lg shadow-sm border border-border/20 opacity-30 hover:opacity-100 hover:bg-background/90 hover:shadow-lg hover:border-border transition-all duration-300 ease-in-out">
       {/* Harmonic logo animation for bulk operations */}
       {(stage === 'loading' && task.type === 'bulk_add') && (
         <HarmonicLoader className="w-6 h-6 flex-shrink-0" />
@@ -244,47 +246,47 @@ function renderToast(
       
       {/* Other status icons */}
       {stage === 'done-show' && (
-        <CheckCircle2 className="h-6 w-6 text-green-400 flex-shrink-0" />
+        <CheckCircle2 className="h-6 w-6 text-green-400/50 group-hover:text-green-400 transition-colors duration-300 flex-shrink-0" />
       )}
       {(stage === 'loading' && task.type === 'undo') && (
-        <Undo2 className="h-6 w-6 text-foreground animate-spin flex-shrink-0" />
+        <Undo2 className="h-6 w-6 text-foreground/50 group-hover:text-foreground animate-spin transition-colors duration-300 flex-shrink-0" />
       )}
 
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium truncate">{task.description}</div>
+          <div className="text-sm font-medium truncate text-foreground/60 group-hover:text-foreground transition-colors duration-300">{task.description}</div>
           {(stage === 'loading' && task.type === 'bulk_add') && (
             <div className="flex items-center gap-2 mt-1">
-              <div className="text-xs text-muted-foreground">{percent}%</div>
+              <div className="text-xs text-muted-foreground/60 group-hover:text-muted-foreground transition-colors duration-300">{percent}%</div>
               {/* Progress bar */}
-              <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+              <div className="flex-1 h-1 bg-muted/30 group-hover:bg-muted rounded-full overflow-hidden transition-colors duration-300">
                 <div 
-                  className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                  className="h-full bg-primary/50 group-hover:bg-primary transition-all duration-300 ease-out rounded-full"
                   style={{ width: `${percent}%` }}
                 />
               </div>
             </div>
           )}
           {(stage === 'loading' && task.type === 'undo') && (
-            <div className="text-xs text-muted-foreground">Undoing...</div>
+            <div className="text-xs text-muted-foreground/60 group-hover:text-muted-foreground transition-colors duration-300">Undoing...</div>
           )}
           {stage === 'done-show' && task.type === 'undo' && (
-            <div className="text-xs text-muted-foreground">Undo complete</div>
+            <div className="text-xs text-muted-foreground/60 group-hover:text-muted-foreground transition-colors duration-300">Undo complete</div>
           )}
           {stage === 'cancelled-show' && (
-            <div className="text-xs text-muted-foreground">Cancelled</div>
+            <div className="text-xs text-muted-foreground/60 group-hover:text-muted-foreground transition-colors duration-300">Cancelled</div>
           )}
         </div>
       </div>
       
       {/* Action buttons */}
       {stage === 'loading' && task.type === 'bulk_add' && onCancel && (
-        <Button variant="outline" size="sm" className="ml-2 text-xs flex-shrink-0" onClick={() => onCancel(task)}>
+        <Button variant="outline" size="sm" className="ml-2 text-xs flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity duration-300" onClick={() => onCancel(task)}>
           Cancel
         </Button>
       )}
       {stage === 'undo-offer' && task.type === 'bulk_add' && task.targetCollectionId && onUndo && (
-        <Button variant="outline" size="sm" className="ml-2 text-xs flex-shrink-0" onClick={() => onUndo(task)}>
+        <Button variant="outline" size="sm" className="ml-2 text-xs flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity duration-300" onClick={() => onUndo(task)}>
           <Undo2 className="h-3 w-3 mr-1" />
           Undo
         </Button>

@@ -63,6 +63,8 @@ const CompanyTable = (props: CompanyTableProps) => {
   const [response, setResponse] = useState<ICompany[]>([]);
   const [allCompanies, setAllCompanies] = useState<ICompany[]>([]);
   const allCacheRef = useRef<Map<string, ICompany[]>>(new Map());
+  // Only refresh once on the first 50-item increment during a bulk add
+  const hasRefreshedFirstBucketRef = useRef<boolean>(false);
   const [total, setTotal] = useState<number>(0);
   const [offset, setOffset] = useState<number>(0);
   const [pageSize] = useState(25);
@@ -215,15 +217,24 @@ const CompanyTable = (props: CompanyTableProps) => {
 
   // Listen for live count increments from background bulk operations
   useEffect(() => {
+    // Reset per-collection one-time refresh flag when switching lists
+    hasRefreshedFirstBucketRef.current = false;
+  }, [props.selectedCollectionId]);
+
+  useEffect(() => {
     const onIncrement = (e: Event) => {
       const custom = e as CustomEvent<{ collectionId: string; amount: number }>;
-      if (custom.detail?.collectionId === props.selectedCollectionId) {
-        setTotal((prev) => prev + (custom.detail.amount || 0));
+      if (custom.detail?.collectionId !== props.selectedCollectionId) return;
+      setTotal((prev) => prev + (custom.detail.amount || 0));
+      // Only auto-refresh once, when on the first page, on the first 50-item increment
+      if (offset === 0 && !hasRefreshedFirstBucketRef.current && !isLoading) {
+        hasRefreshedFirstBucketRef.current = true;
+        fetchData();
       }
     };
     window.addEventListener('collection:count-increment' as any, onIncrement as any);
     return () => window.removeEventListener('collection:count-increment' as any, onIncrement as any);
-  }, [props.selectedCollectionId]);
+  }, [props.selectedCollectionId, offset, isLoading, fetchData]);
 
   const currentPage = Math.floor(offset / pageSize) + 1;
   const totalPages = Math.ceil(total / pageSize);
