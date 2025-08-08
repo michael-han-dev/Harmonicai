@@ -218,12 +218,12 @@ const Sidebar = () => {
 
         {/* User Profile */}
         <div className="mt-4 flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
-          <div className="w-8 h-8 bg-slate-300 dark:bg-slate-600 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium text-slate-700 dark:text-white">CN</span>
+          <div className="w-8 h-8 bg-[hsl(var(--primary))] rounded-full flex items-center justify-center">
+            <span className="text-sm font-medium text-slate-700 dark:text-white">MH</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-slate-900 dark:text-white">shadcn</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 truncate">m@example.com</div>
+            <div className="text-sm font-medium text-slate-900 dark:text-white">Michael Han</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 truncate">michael.han@queensu.ca</div>
           </div>
           <MoreHorizontal className="w-4 h-4 text-slate-500 dark:text-slate-400" />
         </div>
