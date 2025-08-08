@@ -40,7 +40,6 @@ const CompanyTable = (props: CompanyTableProps) => {
   const [search, setSearch] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [isCollectionsOpen, setIsCollectionsOpen] = useState(false);
-  const [collectionLabelOverride, setCollectionLabelOverride] = useState<string | undefined>(undefined);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createIncludeSelected, setCreateIncludeSelected] = useState(false);
@@ -234,16 +233,25 @@ const CompanyTable = (props: CompanyTableProps) => {
   };
 
   const handleDeleteSelected = async () => {
-    const ids = getSelectedCompanyIds();
-    if (selectionMode === 'all' || ids.length === 0) {
-      alert('Please select specific companies to remove.');
-      return;
-    }
     try {
-      await deleteCompaniesFromCollection(props.selectedCollectionId, ids);
+      if (selectionMode === 'all') {
+        const excludeIds = Array.from(excludedIds);
+        await deleteCompaniesFromCollection(props.selectedCollectionId, { mode: 'all', excludeIds });
+      } else {
+        const ids = getSelectedCompanyIds();
+        if (ids.length === 0) {
+          alert('Please select specific companies to remove.');
+          return;
+        }
+        await deleteCompaniesFromCollection(props.selectedCollectionId, { mode: 'selected', companyIds: ids });
+      }
       // Refresh current page
-      setResponse(prev => prev.filter(c => !ids.includes(c.id)));
-      setTotal(prev => Math.max(0, prev - ids.length));
+      // For simplicity, refetch current page data
+      setIsLoading(true);
+      const refreshed = await getCollectionsById(props.selectedCollectionId, offset, pageSize);
+      setResponse(refreshed.companies);
+      setTotal(refreshed.total);
+      setIsLoading(false);
       // Clear selection
       setSelectionMode('none');
       setSelectedIds(new Set());
@@ -315,7 +323,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                     >
                       <button
                         className="flex-1 truncate text-left"
-                        onClick={() => { props.onChangeCollection(col.id); setCollectionLabelOverride(undefined); setIsCollectionsOpen(false); }}
+                        onClick={() => { props.onChangeCollection(col.id); setIsCollectionsOpen(false); }}
                       >
                         {col.collection_name}
                       </button>
@@ -338,7 +346,6 @@ const CompanyTable = (props: CompanyTableProps) => {
                                 const next = props.collectionResponse?.find(c => c.id !== col.id);
                                 if (next) {
                                   props.onChangeCollection(next.id);
-                                  setCollectionLabelOverride(undefined);
                                 }
                               }
                             } catch (err) {
@@ -394,7 +401,6 @@ const CompanyTable = (props: CompanyTableProps) => {
                           const companyIds = getSelectedCompanyIds();
                           await startBulkAdd(props.selectedCollectionId, created.id, { mode, companyIds: mode==='selected' ? companyIds : undefined });
                         }
-                        setCollectionLabelOverride(createName.trim());
                         setIsCreateOpen(false);
                         setCreateName("");
                         setCreateIncludeSelected(false);

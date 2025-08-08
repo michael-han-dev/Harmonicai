@@ -65,7 +65,7 @@ const SearchCommand = ({ isOpen, onClose }: SearchCommandProps) => {
   ];
 
   const settingsItems: SearchItem[] = [
-    { icon: Palette, label: "Themes", hasArrow: true, action: () => setCurrentPage('themes'), shortcut: "G /" },
+    { icon: Palette, label: "Themes", hasArrow: true, action: () => setCurrentPage('themes') },
     { icon: Settings, label: "Settings", shortcut: "⌘ ," },
     { icon: HelpCircle, label: "Get Help", shortcut: "⌘ ?" },
   ];

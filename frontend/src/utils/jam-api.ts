@@ -160,11 +160,17 @@ export async function undoOperation(taskId: string, payload: IUndoRequest): Prom
 }
 
 // Delete specific companies from a collection
-export async function deleteCompaniesFromCollection(collectionId: string, companyIds: number[]): Promise<{ deleted: number }>{
+export async function deleteCompaniesFromCollection(
+    collectionId: string,
+    payload:
+      | { mode: 'selected'; companyIds: number[] }
+      | { mode: 'all'; excludeIds?: number[] }
+): Promise<{ deleted: number }>{
     try {
-        const response = await axios.post(`${BASE_URL}/collections/${collectionId}/companies/delete`, {
-            companyIds,
-        });
+        const response = await axios.post(
+          `${BASE_URL}/collections/${collectionId}/companies/delete`,
+          payload
+        );
         return response.data;
     } catch (error) {
         console.error('Error deleting companies from collection:', error);
