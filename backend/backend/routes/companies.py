@@ -64,7 +64,7 @@ def fetch_companies_with_liked(
         for company, liked in results
     ]
 
-
+# Return a paginated list of companies with total count.
 @router.get("", response_model=CompanyBatchOutput)
 def get_companies(
     offset: int = Query(

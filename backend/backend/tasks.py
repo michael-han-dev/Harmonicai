@@ -101,7 +101,7 @@ def _compute_delta_ids(
     return delta_ids
 
 
-@celery_app.task(bind=True, name="bulk_add_companies")
+@celery_app.task(bind=True, name="bulk_add_companies", queue="bulk")
 def bulk_add_companies(self, source_collection_id: str, target_collection_id: str, mode: str, company_ids: Optional[List[int]] = None):
     r = _get_redis_client()
     task_id = self.request.id
@@ -206,7 +206,7 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
             _release_collection_lock(r, target_collection_id, task_id)
 
 
-@celery_app.task(bind=True, name="undo_bulk_add")
+@celery_app.task(bind=True, name="undo_bulk_add", queue="interactive")
 def undo_bulk_add(self, target_collection_id: str, task_id_to_undo: str):
     r = _get_redis_client()
     task_id = self.request.id

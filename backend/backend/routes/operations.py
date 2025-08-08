@@ -40,7 +40,7 @@ def _get_redis_client() -> redis.Redis:
     redis_url = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
     return redis.Redis.from_url(redis_url, decode_responses=True)
 
-
+# Start a background task to add companies from one collection to another.
 @router.post("/collections/{source_id}/to/{target_id}/companies/batch", response_model=BatchResponse)
 def start_bulk_add(
     source_id: uuid.UUID,
@@ -59,8 +59,8 @@ def start_bulk_add(
     delta_ids = _compute_delta_ids(db, str(source_id), str(target_id), selected)
     total_items = len(delta_ids)
     
-    # Route to appropriate queue: >2000 items = bulk queue, ≤2000 = interactive queue
-    queue_name = "bulk" if total_items > 2000 else "interactive"
+    # Route to appropriate queue: >500 items = bulk queue, ≤500 = interactive queue
+    queue_name = "bulk" if total_items > 500 else "interactive"
     
     async_result = bulk_add_companies.apply_async(
         args=[str(source_id), str(target_id), mode, company_ids], 
@@ -68,15 +68,24 @@ def start_bulk_add(
     )
     return BatchResponse(task_id=async_result.id)
 
-
+# Get the current status/progress of a background task.
 @router.get("/operations/{task_id}/status")
 def get_operation_status(task_id: str):
     result = celery_app.AsyncResult(task_id)
-    meta = result.info if isinstance(result.info, dict) else {}
+    # Celery can raise while decoding backend payloads (e.g., revoked/failure without exc_type)
+    try:
+        info = result.info
+    except Exception:  # noqa: BLE001
+        info = None
+    meta = info if isinstance(info, dict) else {}
+    try:
+        state = result.state
+    except Exception:  # noqa: BLE001
+        state = "UNKNOWN"
     return {
         "task_id": task_id,
-        "state": result.state,
-        "status": meta.get("status", result.state.lower()),
+        "state": state,
+        "status": meta.get("status", state.lower() if isinstance(state, str) else "unknown"),
         "current": meta.get("current", 0),
         "total": meta.get("total", 0),
         "percent": meta.get("percent"),
@@ -84,16 +93,16 @@ def get_operation_status(task_id: str):
         "message": meta.get("message"),
     }
 
-
+# Request graceful cancellation of a running background task.
 @router.post("/operations/{task_id}/cancel")
 def cancel_operation(task_id: str):
     r = _get_redis_client()
     r.set(f"operation:{task_id}:cancel", "1")
-    # Also revoke queued tasks so they don't start
-    celery_app.control.revoke(task_id)
+    # Revoke with terminate=False (graceful); if a worker is processing, it will observe the flag in-task
+    celery_app.control.revoke(task_id, terminate=False)
     return {"status": "cancelling"}
 
-
+# Trigger a fast undo of a previous bulk add by deleting inserted rows.
 @router.post("/operations/{task_id}/undo")
 def undo_operation(task_id: str, payload: UndoRequest):
     async_result = undo_bulk_add.apply_async(args=[str(payload.target_collection_id), task_id], queue="interactive")

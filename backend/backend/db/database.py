@@ -49,10 +49,10 @@ class Company(Base):
     )
     id = Column(Integer, primary_key=True, index=True)
     company_name = Column(String, index=True)
-    team_size = Column(Integer)
-    funding_round = Column(String)  # "pre-seed", "seed", "Series A", "Series B", "Series C"
+    team_size = Column(Integer) # goes from 2-300 but team sizes have a capped range within each funding round
+    funding_round = Column(String)  # "Pre-seed", "Seed", "Series A", "Series B", "Series C"
     industry = Column(String)
-    founded_year = Column(Integer)
+    founded_year = Column(Integer) # goes from 2018-2025
 
 class CompanyCollection(Base):
     __tablename__ = "company_collections"
