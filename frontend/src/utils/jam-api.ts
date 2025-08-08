@@ -92,6 +92,16 @@ export async function getCollectionsMetadata(): Promise<ICollection[]> {
     }
 }
 
+export async function createCollection(collection_name: string): Promise<ICollection> {
+    try {
+        const response = await axios.post(`${BASE_URL}/collections`, { collection_name });
+        return response.data;
+    } catch (error) {
+        console.error('Error creating collection:', error);
+        throw error;
+    }
+}
+
 // Operations API functions
 export async function startBulkAdd(
     sourceId: string,

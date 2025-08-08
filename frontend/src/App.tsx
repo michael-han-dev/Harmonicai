@@ -42,7 +42,7 @@ function App() {
 
   return (
     <div className="flex min-h-screen w-screen m-0 p-0">
-      <aside className="fixed left-0 top-0 h-screen w-64 overflow-y-auto bg-background border-r border-border z-30">
+      <aside className="fixed left-0 top-0 h-screen w-64 overflow-hidden overscroll-none bg-background border-r border-border z-30">
         <Sidebar />
       </aside>
       <main className="flex-1 ml-64 min-h-screen bg-background text-foreground flex flex-col">
@@ -50,21 +50,7 @@ function App() {
         <div className="bg-background border-b border-border px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <h1 className="text-lg font-semibold">Documents</h1>
-              
-              {/* Collections Dropdown */}
-              <select
-                value={selectedCollectionId || ''}
-                onChange={(e) => setSelectedCollectionId(e.target.value)}
-                className="px-3 py-1 rounded-md border border-border bg-background text-foreground text-sm"
-              >
-                <option value="">Select Collection</option>
-                {collectionResponse?.map((collection) => (
-                  <option key={collection.id} value={collection.id}>
-                    {collection.collection_name}
-                  </option>
-                ))}
-              </select>
+              <h1 className="text-lg font-semibold">Company search</h1>
             </div>
             <ThemeToggle />
           </div>
@@ -72,14 +58,15 @@ function App() {
 
         {/* Content Area - Full Width Company Table */}
         <div className="flex-1">
-          {selectedCollectionId && (
-            <CompanyTable 
-              selectedCollectionId={selectedCollectionId}
-              collectionResponse={collectionResponse}
-              onStartBulkTask={addBackgroundTask}
-              getCollectionName={getCollectionName}
-            />
-          )}
+            {selectedCollectionId && (
+              <CompanyTable 
+                selectedCollectionId={selectedCollectionId}
+                collectionResponse={collectionResponse}
+                onStartBulkTask={addBackgroundTask}
+                getCollectionName={getCollectionName}
+                onChangeCollection={setSelectedCollectionId}
+              />
+            )}
         </div>
         
         <BackgroundTasksManager
