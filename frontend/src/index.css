@@ -131,6 +131,25 @@
   .dark ::-webkit-scrollbar-thumb:hover {
     background: hsl(220 14% 40%);
   }
+
+  /* Row appear animation for table */
+  @keyframes rowFadeSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .table-row-appear {
+    animation-name: rowFadeSlideIn;
+    animation-duration: 300ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    animation-fill-mode: both;
+  }
 }
 
 /* Fancy theme switch reveal using the View Transitions API */

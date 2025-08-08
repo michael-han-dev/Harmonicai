@@ -417,7 +417,7 @@ const CompanyTable = (props: CompanyTableProps) => {
             <span className="leading-none">
               {getSelectedCount()} selected
               {selectionMode === 'all' && (
-                <span className="ml-1 text-blue-400">(all)</span>
+                <span className="ml-1 text-[hsl(var(--primary))]">(all)</span>
               )}
             </span>
             {/* Active filter chips */}
@@ -566,10 +566,14 @@ const CompanyTable = (props: CompanyTableProps) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleCompanies.map((company) => {
+                  {visibleCompanies.map((company, idx) => {
                     const isFlagged = flaggedEndById.has(company.id);
                     return (
-                    <TableRow key={company.id} className={`h-12 ${isFlagged ? 'bg-[hsl(var(--primary))]' : ''}`}>
+                    <TableRow
+                      key={company.id}
+                      className={`h-12 table-row-appear ${isFlagged ? 'bg-[hsl(var(--primary))]' : ''}`}
+                      style={{ animationDelay: `${idx * 20}ms` }}
+                    >
                       <TableCell className="w-12 text-left align-middle border-r border-border">
                         <Checkbox
                           checked={isCompanySelected(company.id)}
