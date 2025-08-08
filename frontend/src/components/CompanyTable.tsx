@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, MoveRight, Heart, Trash2, SlidersHorizontal, LayoutGrid } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoveRight, Heart, Trash2, SlidersHorizontal, LayoutGrid, Flag } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import { Plus, Check } from "lucide-react";
 import { createCollection } from "@/utils/jam-api";
@@ -46,7 +46,7 @@ const CompanyTable = (props: CompanyTableProps) => {
   // Row Filters
   const [filterText, setFilterText] = useState<string>("");
   const [filterLikedOnly, setFilterLikedOnly] = useState<boolean>(false);
-  const [filterIndustry, setFilterIndustry] = useState<string>("");
+  const [industriesSelected, setIndustriesSelected] = useState<string[]>([]);
   const [sizeRanges, setSizeRanges] = useState<string[]>([]);
   const [fundingFilters, setFundingFilters] = useState<string[]>([]);
   // Column visibility
@@ -247,11 +247,28 @@ const CompanyTable = (props: CompanyTableProps) => {
   const visibleCompanies = response.filter((c) => {
     const matchesText = filterText ? c.company_name.toLowerCase().includes(filterText.toLowerCase()) : true;
     const matchesLiked = filterLikedOnly ? Boolean((c as any).liked) === true : true;
-    const matchesIndustry = filterIndustry ? c.industry === filterIndustry : true;
+    const matchesIndustry = industriesSelected.length > 0 ? industriesSelected.includes(String(c.industry)) : true;
     const matchesFunding = fundingFilters.length > 0 ? fundingFilters.includes(String(c.funding_round)) : true;
     const matchesSize = withinSelectedSizes(Number(c.team_size));
     return matchesText && matchesLiked && matchesIndustry && matchesFunding && matchesSize;
   });
+
+  // Flagging state: map of companyId -> end label
+  const [flaggedEndById, setFlaggedEndById] = useState<Map<number, string>>(new Map());
+  const setFlagForSelected = (endLabel: string | null) => {
+    const ids = getSelectedCompanyIds();
+    setFlaggedEndById((prev) => {
+      const next = new Map(prev);
+      ids.forEach((id) => {
+        if (endLabel) {
+          next.set(id, endLabel);
+        } else {
+          next.delete(id);
+        }
+      });
+      return next;
+    });
+  };
 
   return (
     <Card className="h-full flex flex-col">
@@ -336,10 +353,10 @@ const CompanyTable = (props: CompanyTableProps) => {
                   <SlidersHorizontal className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-96 p-3" sideOffset={8} align="start">
-                <div className="grid gap-3">
+              <DropdownMenuContent className="w-96 p-4" sideOffset={8} align="start">
+                <div className="grid gap-4">
                   <div>
-                    <label className="block text-xs mb-1">Search</label>
+                    <div className="text-sm font-semibold text-left mb-2">Search</div>
                     <input
                       value={filterText}
                       onChange={(e)=>setFilterText(e.target.value)}
@@ -347,21 +364,23 @@ const CompanyTable = (props: CompanyTableProps) => {
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
                     />
                   </div>
+                  <div className="border-t border-border" />
                   <div>
-                    <label className="block text-xs mb-1">Industry</label>
-                    <select
-                      value={filterIndustry}
-                      onChange={(e)=>setFilterIndustry(e.target.value)}
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="">All</option>
+                    <div className="text-sm font-semibold text-left mb-2">Industry</div>
+                    <div className="flex flex-wrap gap-2">
                       {industries.map((ind)=> (
-                        <option key={ind} value={ind}>{ind}</option>
+                        <button
+                          key={ind}
+                          type="button"
+                          onClick={()=> setIndustriesSelected((prev)=> prev.includes(ind) ? prev.filter(x=>x!==ind) : [...prev, ind])}
+                          className={`rounded-full px-3 py-1 text-xs border ${industriesSelected.includes(ind) ? 'bg-[hsl(var(--primary))] text-white border-indigo-600' : 'bg-background border-border'}`}
+                        >{ind}</button>
                       ))}
-                    </select>
+                    </div>
                   </div>
+                  <div className="border-t border-border" />
                   <div>
-                    <div className="text-xs mb-1">Team size</div>
+                    <div className="text-sm font-semibold text-left mb-2">Team size</div>
                     <div className="flex flex-wrap gap-2">
                       {(["0-10","11-50","51-200","201-500","500+"] as const).map((r)=> (
                         <button
@@ -373,8 +392,9 @@ const CompanyTable = (props: CompanyTableProps) => {
                       ))}
                     </div>
                   </div>
+                  <div className="border-t border-border" />
                   <div>
-                    <div className="text-xs mb-1">Funding</div>
+                    <div className="text-sm font-semibold text-left mb-2">Funding</div>
                     <div className="flex flex-wrap gap-2">
                       {Array.from(new Set(response.map((c)=> String(c.funding_round)).filter(Boolean))).map((f)=> (
                         <button
@@ -386,13 +406,8 @@ const CompanyTable = (props: CompanyTableProps) => {
                       ))}
                     </div>
                   </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={filterLikedOnly} onChange={(e)=>setFilterLikedOnly(e.target.checked)} />
-                    Liked only
-                  </label>
                   <div className="flex gap-2">
-                    <Button variant="outline" className="h-8 px-3" onClick={()=>{ setFilterText(''); setFilterIndustry(''); setFilterLikedOnly(false); setSizeRanges([]); setFundingFilters([]); }}>Reset</Button>
-                    <Button className="h-8 px-3">Apply</Button>
+                    <Button variant="outline" className="h-8 px-3 text-sm font-normal" onClick={()=>{ setFilterText(''); setIndustriesSelected([]); setFilterLikedOnly(false); setSizeRanges([]); setFundingFilters([]); }}>Reset</Button>
                   </div>
                 </div>
               </DropdownMenuContent>
@@ -405,6 +420,26 @@ const CompanyTable = (props: CompanyTableProps) => {
                 <span className="ml-1 text-blue-400">(all)</span>
               )}
             </span>
+            {/* Active filter chips */}
+            {(industriesSelected.length > 0 || sizeRanges.length > 0 || fundingFilters.length > 0) && (
+              <div className="flex items-center gap-2 ml-2">
+                {fundingFilters.length > 0 && (
+                  <div className="rounded-full bg-background border border-border px-3 py-1 text-xs">
+                    Funding <span className="ml-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[hsl(var(--primary))] text-white text-[10px] px-1">{fundingFilters.length}</span>
+                  </div>
+                )}
+                {sizeRanges.length > 0 && (
+                  <div className="rounded-full bg-background border border-border px-3 py-1 text-xs">
+                    Team <span className="ml-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[hsl(var(--primary))] text-white text-[10px] px-1">{sizeRanges.length}</span>
+                  </div>
+                )}
+                {industriesSelected.length > 0 && (
+                  <div className="rounded-full bg-background border border-border px-3 py-1 text-xs">
+                    Sector <span className="ml-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[hsl(var(--primary))] text-white text-[10px] px-1">{industriesSelected.length}</span>
+                  </div>
+                )}
+              </div>
+            )}
             {/* Customize Columns */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -463,6 +498,37 @@ const CompanyTable = (props: CompanyTableProps) => {
                 <Button size="icon" variant="outline" className="h-7 w-7" title="Add to Liked" onClick={handleBulkAddToLiked}>
                   <Heart className="h-4 w-4" />
                 </Button>
+                {/* Flag Button */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="outline" className="h-7 w-7" title="Flag selected">
+                      <Flag className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-44 p-1">
+                    {[
+                      { label: 'No date', value: 'no date' },
+                      { label: 'Tomorrow', value: 'tomorrow' },
+                      { label: 'In 3 days', value: '3 days' },
+                      { label: 'Next week', value: 'next week' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent"
+                        onClick={() => setFlagForSelected(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                    <div className="border-t border-border my-1" />
+                    <button
+                      className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent"
+                      onClick={() => setFlagForSelected(null)}
+                    >
+                      Clear flag
+                    </button>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {/* Delete Button */}
                 <Button size="icon" variant="outline" className="h-7 w-7" title="Remove from List">
                   <Trash2 className="h-4 w-4" />
@@ -500,8 +566,10 @@ const CompanyTable = (props: CompanyTableProps) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleCompanies.map((company) => (
-                    <TableRow key={company.id} className="h-12">
+                  {visibleCompanies.map((company) => {
+                    const isFlagged = flaggedEndById.has(company.id);
+                    return (
+                    <TableRow key={company.id} className={`h-12 ${isFlagged ? 'bg-[hsl(var(--primary))]' : ''}`}>
                       <TableCell className="w-12 text-left align-middle border-r border-border">
                         <Checkbox
                           checked={isCompanySelected(company.id)}
@@ -526,7 +594,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                         <TableCell className="w-24 text-left align-middle">{company.founded_year}</TableCell>
                       )}
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             </div>
