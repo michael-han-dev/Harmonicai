@@ -67,14 +67,39 @@ export async function getCompanies(offset?: number, limit?: number): Promise<ICo
     }
 }
 
-export async function getCollectionsById(id: string, offset?: number, limit?: number): Promise<ICollection> {
+export type CollectionQueryParams = {
+    offset?: number;
+    limit?: number;
+    search?: string;
+    industries?: string[];
+    funding?: string[];
+    sizeRanges?: string[];
+    liked_only?: boolean;
+};
+
+export async function getCollectionsById(
+    id: string,
+    paramsOrOffset?: number | CollectionQueryParams,
+    limit?: number
+): Promise<ICollection> {
     try {
-        const response = await axios.get(`${BASE_URL}/collections/${id}`, {
-            params: {
-                offset,
-                limit,
-            },
+        const url = `${BASE_URL}/collections/${id}`;
+        if (typeof paramsOrOffset === 'number' || typeof paramsOrOffset === 'undefined') {
+            const response = await axios.get(url, { params: { offset: paramsOrOffset, limit } });
+            return response.data;
+        }
+        // Serialize arrays as repeated keys (industries=A&industries=B) so FastAPI parses them
+        const sp = new URLSearchParams();
+        const params = paramsOrOffset as CollectionQueryParams;
+        Object.entries(params).forEach(([key, value]) => {
+            if (value === undefined || value === null) return;
+            if (Array.isArray(value)) {
+                value.forEach((v) => sp.append(key, String(v)));
+            } else {
+                sp.append(key, String(value));
+            }
         });
+        const response = await axios.get(`${url}?${sp.toString()}`);
         return response.data;
     } catch (error) {
         console.error('Error fetching companies:', error);

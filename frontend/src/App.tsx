@@ -19,6 +19,29 @@ function App() {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showSearchCommand, setShowSearchCommand] = useState(false);
   const { data: collectionResponse, refetch: refetchCollections } = useApi(() => getCollectionsMetadata());
+  // Restore background tasks after refresh so popups persist across reloads
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('harmonic.backgroundTasks');
+      if (raw) {
+        const parsed: any[] = JSON.parse(raw);
+        const revived: BackgroundTask[] = parsed.map((t) => ({
+          ...t,
+          startTime: new Date(t.startTime),
+        }));
+        if (revived.length > 0) setBackgroundTasks(revived);
+      }
+    } catch {}
+  }, []);
+
+  // Persist background tasks so refresh keeps the UI
+  useEffect(() => {
+    try {
+      const serializable = backgroundTasks.map((t) => ({ ...t, startTime: t.startTime.toISOString() }));
+      localStorage.setItem('harmonic.backgroundTasks', JSON.stringify(serializable));
+    } catch {}
+  }, [backgroundTasks]);
+
 
   useEffect(() => {
     setSelectedCollectionId(collectionResponse?.[0]?.id);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Undo2, CheckCircle2 } from "lucide-react";
-import { getOperationStatus, undoOperation, IOperationStatus } from "../utils/jam-api";
+import { getOperationStatus, undoOperation, cancelOperation, IOperationStatus } from "../utils/jam-api";
 
 export interface BackgroundTask {
   taskId: string;
@@ -54,6 +54,9 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
                 setUiStageByTask(prev2 => ({ ...prev2, [task.taskId]: 'hidden' }));
               }, 3000);
             }, 2000);
+          } else {
+            // Ensure loading stage when polling resumes after a refresh
+            setUiStageByTask(prev => (prev[task.taskId] ? prev : { ...prev, [task.taskId]: 'loading' }));
           }
         } catch (error) {
           console.error(`Error polling task ${task.taskId}:`, error);
@@ -80,6 +83,14 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
     }
   };
 
+  const handleCancel = async (taskId: string) => {
+    try {
+      await cancelOperation(taskId);
+    } catch (error) {
+      console.error('Error cancelling task:', error);
+    }
+  };
+
   // Auto-remove hidden tasks
   useEffect(() => {
     Object.entries(uiStageByTask).forEach(([taskId, stage]) => {
@@ -101,11 +112,19 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
         if (stage === 'hidden') return null;
 
         return (
-          <div key={task.taskId} className="flex items-center justify-between gap-3 bg-background/90 backdrop-blur px-4 py-3 rounded-md shadow border border-border">
+          <div key={task.taskId} className="relative flex items-center justify-between gap-3 bg-background/90 backdrop-blur px-4 py-3 rounded-md shadow border border-border">
+            {/* Overlay animation for loading and interactive undo */}
+            {(stage === 'loading' || stage === 'undo-started') && (
+              <video
+                src="/Logo_Loading_Animation_Generation.mp4"
+                className="pointer-events-none absolute -top-3 -left-3 h-10 w-10 rounded opacity-90"
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            )}
             <div className="flex items-center gap-3 min-w-0">
-              {stage === 'loading' && (
-                <video src="/Logo_Loading_Animation_Generation.mp4" className="h-7 w-7 rounded" autoPlay loop muted playsInline />
-              )}
               {stage === 'done-show' && (
                 <CheckCircle2 className="h-6 w-6 text-green-400" />
               )}
@@ -122,12 +141,19 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
                 )}
               </div>
             </div>
+            <div className="flex items-center gap-2">
+            {stage === 'loading' && task.type === 'bulk_add' && (
+              <Button variant="outline" size="sm" className="text-xs" onClick={() => handleCancel(task.taskId)}>
+                Cancel
+              </Button>
+            )}
             {stage === 'undo-offer' && task.type === 'bulk_add' && task.targetCollectionId && (
               <Button variant="outline" size="sm" className="text-xs" onClick={() => handleUndo(task.taskId, task.targetCollectionId!)}>
                 <Undo2 className="h-3 w-3 mr-1" />
                 Undo
               </Button>
             )}
+            </div>
           </div>
         );
       })}

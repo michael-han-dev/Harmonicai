@@ -30,6 +30,35 @@ interface CompanyTableProps {
 }
 
 const CompanyTable = (props: CompanyTableProps) => {
+  // Stable facet list for Industry (matches backend seed in main.py)
+  const ALL_INDUSTRIES = [
+    "Healthcare Tech",
+    "Education & EdTech",
+    "Finance & FinTech",
+    "Developer Tools",
+    "Enterprise SaaS",
+    "AI Infrastructure",
+    "Climate & Energy",
+    "E-commerce Enablement",
+    "Cybersecurity",
+    "Creator Economy",
+  ];
+  const FUNDING_ORDER = ["Pre-seed", "Seed", "Series A", "Series B", "Series C"] as const;
+  const FUNDING_MAX: Record<typeof FUNDING_ORDER[number], number> = {
+    "Pre-seed": 10,
+    "Seed": 20,
+    "Series A": 75,
+    "Series B": 150,
+    "Series C": 300,
+  };
+  const SIZE_RANGE_MIN: Record<string, number> = {
+    "0-10": 0,
+    "11-50": 11,
+    "51-200": 51,
+    "201-500": 201,
+    "500+": 501,
+  };
+  // Note: depends on sizeRanges; compute after its declaration
   const [response, setResponse] = useState<ICompany[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [offset, setOffset] = useState<number>(0);
@@ -50,6 +79,10 @@ const CompanyTable = (props: CompanyTableProps) => {
   const [sizeRanges, setSizeRanges] = useState<string[]>([]);
   const [fundingFilters, setFundingFilters] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const selectedMinTeamSize = sizeRanges.length > 0 ? Math.min(...sizeRanges.map(r => SIZE_RANGE_MIN[r])) : undefined;
+  const DISPLAY_FUNDING = selectedMinTeamSize === undefined
+    ? FUNDING_ORDER
+    : FUNDING_ORDER.filter(fr => FUNDING_MAX[fr] >= (selectedMinTeamSize as number));
   // Column visibility
   const [visibleCols, setVisibleCols] = useState({
     company: true,
@@ -62,14 +95,22 @@ const CompanyTable = (props: CompanyTableProps) => {
 
   useEffect(() => {
     setIsLoading(true);
-    getCollectionsById(props.selectedCollectionId, offset, pageSize).then(
-      (newResponse) => {
-        setResponse(newResponse.companies);
-        setTotal(newResponse.total);
-        setIsLoading(false);
-      }
-    );
-  }, [props.selectedCollectionId, offset, pageSize]);
+    const params: Record<string, any> = {
+      offset,
+      limit: pageSize,
+    };
+    if (filterText.trim()) params.search = filterText.trim();
+    if (industriesSelected.length > 0) params.industries = industriesSelected;
+    if (fundingFilters.length > 0) params.funding = fundingFilters;
+    if (sizeRanges.length > 0) params.sizeRanges = sizeRanges;
+    if (filterLikedOnly) params.liked_only = true;
+
+    getCollectionsById(props.selectedCollectionId, params).then((newResponse) => {
+      setResponse(newResponse.companies);
+      setTotal(newResponse.total);
+      setIsLoading(false);
+    });
+  }, [props.selectedCollectionId, offset, pageSize, filterText, industriesSelected, fundingFilters, sizeRanges, filterLikedOnly]);
 
   useEffect(() => {
     setOffset(0);
@@ -80,6 +121,10 @@ const CompanyTable = (props: CompanyTableProps) => {
 
   const currentPage = Math.floor(offset / pageSize) + 1;
   const totalPages = Math.ceil(total / pageSize);
+  const displayFrom = total === 0 ? 0 : offset + 1;
+  const displayTo = total === 0 ? 0 : Math.min(offset + pageSize, total);
+  const displayCurrentPage = total === 0 ? 0 : currentPage;
+  const displayTotalPages = total === 0 ? 0 : totalPages;
 
   // Helper functions for selection state
   const isCompanySelected = (companyId: number): boolean => {
@@ -264,27 +309,8 @@ const CompanyTable = (props: CompanyTableProps) => {
     }
   };
 
-  const industries = Array.from(new Set(response.map((c) => c.industry).filter(Boolean)));
-  const withinSelectedSizes = (team: number | null | undefined) => {
-    if (sizeRanges.length === 0) return true;
-    if (team == null) return false;
-    return sizeRanges.some((r) => {
-      if (r === "0-10") return team >= 0 && team <= 10;
-      if (r === "11-50") return team >= 11 && team <= 50;
-      if (r === "51-200") return team >= 51 && team <= 200;
-      if (r === "201-500") return team >= 201 && team <= 500;
-      if (r === "500+") return team >= 501;
-      return true;
-    });
-  };
-  const visibleCompanies = response.filter((c) => {
-    const matchesText = filterText ? c.company_name.toLowerCase().includes(filterText.toLowerCase()) : true;
-    const matchesLiked = filterLikedOnly ? Boolean((c as any).liked) === true : true;
-    const matchesIndustry = industriesSelected.length > 0 ? industriesSelected.includes(String(c.industry)) : true;
-    const matchesFunding = fundingFilters.length > 0 ? fundingFilters.includes(String(c.funding_round)) : true;
-    const matchesSize = withinSelectedSizes(Number(c.team_size));
-    return matchesText && matchesLiked && matchesIndustry && matchesFunding && matchesSize;
-  });
+  // Industry options are static to avoid changing as pages/filters change
+  const visibleCompanies = response;
 
   // Flagging state: map of companyId -> end label
   const [flaggedEndById, setFlaggedEndById] = useState<Map<number, string>>(new Map());
@@ -435,7 +461,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                   <div>
                     <div className="text-sm font-semibold text-left mb-2">Industry</div>
                     <div className="flex flex-wrap gap-2">
-                      {industries.map((ind)=> (
+                      {ALL_INDUSTRIES.map((ind: string)=> (
                         <button
                           key={ind}
                           type="button"
@@ -463,7 +489,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                   <div>
                     <div className="text-sm font-semibold text-left mb-2">Funding</div>
                     <div className="flex flex-wrap gap-2">
-                      {Array.from(new Set(response.map((c)=> String(c.funding_round)).filter(Boolean))).map((f)=> (
+                      {DISPLAY_FUNDING.map((f) => (
                         <button
                           key={f}
                           type="button"
@@ -688,7 +714,7 @@ const CompanyTable = (props: CompanyTableProps) => {
             {/* Pagination */}
             <div className="flex items-center justify-between p-4 border-t bg-background">
               <div className="text-sm text-muted-foreground">
-                Showing {offset + 1} to {Math.min(offset + pageSize, total)} of {total.toLocaleString()} companies
+                Showing {displayFrom} to {displayTo} of {total.toLocaleString()} companies
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -701,7 +727,7 @@ const CompanyTable = (props: CompanyTableProps) => {
                   Previous
                 </Button>
                 <div className="text-sm">
-                  Page {currentPage} of {totalPages}
+                  Page {displayCurrentPage} of {displayTotalPages}
                 </div>
                 <Button
                   variant="outline"
