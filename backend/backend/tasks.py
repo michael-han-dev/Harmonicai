@@ -81,9 +81,13 @@ def _clear_operation_state(r: redis.Redis, task_id: str) -> None:
 def _compute_delta_ids(
     db: database.SessionLocal, source_collection_id: str, target_collection_id: str, selected_ids: Optional[List[int]]
 ) -> List[int]:
+    import uuid
+    source_uuid = uuid.UUID(source_collection_id)
+    target_uuid = uuid.UUID(target_collection_id)
+    
     source_q = (
         db.query(database.CompanyCollectionAssociation.company_id)
-        .filter(database.CompanyCollectionAssociation.collection_id == source_collection_id)
+        .filter(database.CompanyCollectionAssociation.collection_id == source_uuid)
     )
     if selected_ids is not None:
         if not selected_ids:
@@ -91,16 +95,14 @@ def _compute_delta_ids(
         source_q = source_q.filter(database.CompanyCollectionAssociation.company_id.in_(selected_ids))
     source_ids = {cid for (cid,) in source_q.all()}
 
-    # Get company_ids already in target
     target_ids = {
         cid
         for (cid,)
         in db.query(database.CompanyCollectionAssociation.company_id)
-        .filter(database.CompanyCollectionAssociation.collection_id == target_collection_id)
+        .filter(database.CompanyCollectionAssociation.collection_id == target_uuid)
         .all()
     }
 
-    # Set difference
     delta_ids = list(source_ids - target_ids)
     return delta_ids
 
@@ -111,7 +113,6 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
     task_id = self.request.id
     acquired = False
     try:
-        # Enforce exclusivity on target collection
         acquired = _acquire_collection_lock(r, target_collection_id, task_id, ttl_seconds=24 * 3600)
         if not acquired:
             meta = {"status": "failed", "message": "Another bulk operation is already writing to the target collection."}
@@ -127,9 +128,12 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
             self.update_state(state=states.STARTED, meta={"status": "starting", "current": 0, "total": total})
 
             inserted_count = 0
-            # Insert sequentially to respect per-row throttle; commit in small batches for progress checkpoints
             batch_size = 50
             batch: List[database.CompanyCollectionAssociation] = []
+
+            # Convert string UUID to UUID object for database operations
+            import uuid
+            target_uuid = uuid.UUID(target_collection_id)
 
             for idx, company_id in enumerate(delta_ids, start=1):
                 if _is_cancel_requested(r, task_id):
@@ -139,13 +143,11 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
                     )
                     return {"status": "cancelled", "inserted": inserted_count, "total": total}
 
-                # Check if interactive task is active and pause if so
                 if _is_interactive_task_active(r):
                     self.update_state(
                         state=states.STARTED,
                         meta={"status": "paused", "current": inserted_count, "total": total, "message": "Paused for interactive task"}
                     )
-                    # Wait until interactive task finishes
                     import time
                     while _is_interactive_task_active(r) and not _is_cancel_requested(r, task_id):
                         time.sleep(1)
@@ -155,14 +157,13 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
                             meta={"status": "cancelled", "current": inserted_count, "total": total},
                         )
                         return {"status": "cancelled", "inserted": inserted_count, "total": total}
-                    # Resume
                     self.update_state(
                         state=states.STARTED,
                         meta={"status": "resumed", "current": inserted_count, "total": total, "message": "Resuming after interactive task"}
                     )
 
                 association = database.CompanyCollectionAssociation(
-                    company_id=company_id, collection_id=target_collection_id
+                    company_id=company_id, collection_id=target_uuid
                 )
                 batch.append(association)
 
@@ -173,12 +174,10 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
                         inserted_count += 1
                     db_session.commit()
 
-                    # Track inserted ids for possible undo
+                    # Track inserted company IDs for undo functionality
                     _store_inserted_ids(r, task_id, [a.company_id for a in batch])
 
-                    # Progress update
                     percent = (inserted_count / total) * 100 if total else 100.0
-                    # ETA: simple linear projection based on 0.1s/row remaining
                     remaining = max(total - inserted_count, 0)
                     eta_seconds = remaining * 0.1
                     self.update_state(
@@ -194,7 +193,6 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
 
                     batch.clear()
 
-            # If cancellation was requested right at the end, report cancelled instead of completed
             if _is_cancel_requested(r, task_id):
                 self.update_state(
                     state=states.REVOKED,
@@ -223,20 +221,24 @@ def undo_bulk_add(self, target_collection_id: str, task_id_to_undo: str):
     r = _get_redis_client()
     task_id = self.request.id
     
-    # Mark this interactive task as active to pause bulk operations
     _set_interactive_task_active(r, task_id)
     
     db_session = database.SessionLocal()
     try:
+        self.update_state(state=states.STARTED, meta={"status": "starting", "current": 0, "total": 0})
+        
         inserted_ids = _fetch_inserted_ids(r, task_id_to_undo)
         if not inserted_ids:
             self.update_state(state=states.SUCCESS, meta={"status": "completed", "deleted": 0})
             return {"status": "completed", "deleted": 0}
 
-        # Bulk delete associations for these ids in the target collection
-        (
+        # Convert string UUID to UUID object for database query
+        import uuid
+        collection_uuid = uuid.UUID(target_collection_id)
+        
+        deleted_count = (
             db_session.query(database.CompanyCollectionAssociation)
-            .filter(database.CompanyCollectionAssociation.collection_id == target_collection_id)
+            .filter(database.CompanyCollectionAssociation.collection_id == collection_uuid)
             .filter(database.CompanyCollectionAssociation.company_id.in_(inserted_ids))
             .delete(synchronize_session=False)
         )
@@ -244,15 +246,14 @@ def undo_bulk_add(self, target_collection_id: str, task_id_to_undo: str):
 
         _clear_operation_state(r, task_id_to_undo)
 
-        self.update_state(state=states.SUCCESS, meta={"status": "completed", "deleted": len(inserted_ids)})
-        return {"status": "completed", "deleted": len(inserted_ids)}
-    except Exception as exc:  # noqa: BLE001
+        self.update_state(state=states.SUCCESS, meta={"status": "completed", "deleted": deleted_count})
+        return {"status": "completed", "deleted": deleted_count}
+    except Exception as exc:
         logger.exception("undo_bulk_add failed: %s", exc)
         self.update_state(state=states.FAILURE, meta={"status": "failed", "message": str(exc)})
         raise
     finally:
         db_session.close()
-        # Clear interactive task marker
         _clear_interactive_task_active(r, task_id)
 
 
