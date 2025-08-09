@@ -13,6 +13,9 @@ I then added indices to the company and collection id foreign keys for faster lo
 I then implemented backend related features I thought were important. Examples: cancelling an operation, undo, adding collections, deleting a collection, deleting a company, lot of time was spent here adding a backend feature and hooking up the endpoints with the frontend. Optimizing the 2 queue system. I realized somewhere at this point that perhaps if a user is adding something to another list, they probably want to view the new list they just made. So I should've went with an optimistic UI (update immediately client side, backfill it server side). I also should've considered if the user is making a copy of a list or moving a ton of information to another list they probably want to export it immediately or make small changes, so everything can be rendered client side and server can catch up after, this feels more pleasant to use then my current implementation with the loading animation and dual queue system. Poor design decision on my end. The current implementation basically runs the bulk queue, when a smaller job is done, it gets pushed to the interactive queue which has "higher priority", so the smaller job is done quickly, and then the bulk queue continues from where it left off. This covers a lot of cases where the user wants to quickly move information between different lists. I finished by looking at bug fixes, ui optimizations and few extra features like adding flagging etc.
 
 ## Some features to add if I were to keep working on this:
+- enrich the data, implement some features within the sidebar
+- Feature flags to roll out optimistic UI and new queues safely
+- Testing
 - custom columns (eg, notes, tags)
 - full keybind customization and functionality
 - add an option to add currently selected companies to a new list
