@@ -22,5 +22,6 @@ I then implemented backend related features I thought were important. Examples: 
 - fuzzy and semantic company searching
 - ai recommendations for companies to add
 - change # of rows displayed per page
+- kanban style dragging features to rearrange rows/columns etc
 - double pane view (see example image below for reference):
 ![dual pane view](frontend/public/dualpane.png)
