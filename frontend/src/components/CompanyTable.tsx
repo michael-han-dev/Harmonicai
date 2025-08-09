@@ -63,6 +63,8 @@ const CompanyTable = (props: CompanyTableProps) => {
   const [response, setResponse] = useState<ICompany[]>([]);
   const [allCompanies, setAllCompanies] = useState<ICompany[]>([]);
   const allCacheRef = useRef<Map<string, ICompany[]>>(new Map());
+  const selectedCollectionIdRef = useRef<string>(props.selectedCollectionId);
+  const isSwitchingRef = useRef<boolean>(false);
   // Only refresh once on the first 50-item increment during a bulk add
   const hasRefreshedFirstBucketRef = useRef<boolean>(false);
   const [total, setTotal] = useState<number>(0);
@@ -162,6 +164,7 @@ const CompanyTable = (props: CompanyTableProps) => {
   };
 
   const fetchData = async () => {
+    const collectionId = selectedCollectionIdRef.current;
     setIsLoading(true);
     const params: Record<string, any> = {
       offset,
@@ -173,7 +176,7 @@ const CompanyTable = (props: CompanyTableProps) => {
     if (sizeRanges.length > 0) params.sizeRanges = sizeRanges;
     if (filterLikedOnly) params.liked_only = true;
 
-    const newResponse = await getCollectionsById(props.selectedCollectionId, params);
+    const newResponse = await getCollectionsById(collectionId, params);
     setResponse(newResponse.companies);
     setTotal(newResponse.total);
     if (offset > 0 && offset >= newResponse.total) {
@@ -185,17 +188,19 @@ const CompanyTable = (props: CompanyTableProps) => {
     // fetch the entire list in background (do not block UI) with simple memo cache
     if (newResponse.total > 0) {
       setAllCompanies((prev) => (prev.length ? prev : newResponse.companies));
-      const key = JSON.stringify({ id: props.selectedCollectionId, q: { ...params, offset: 0, limit: newResponse.total } });
+      const key = JSON.stringify({ id: collectionId, q: { ...params, offset: 0, limit: newResponse.total } });
       const cached = allCacheRef.current.get(key);
       if (cached) {
-        setAllCompanies(cached);
+        if (selectedCollectionIdRef.current === collectionId) setAllCompanies(cached);
         return;
       }
       const allParams: Record<string, any> = { ...params, offset: 0, limit: newResponse.total };
-      getCollectionsById(props.selectedCollectionId, allParams)
+      getCollectionsById(collectionId, allParams)
         .then((allResp) => {
-          setAllCompanies(allResp.companies);
-          allCacheRef.current.set(key, allResp.companies);
+          if (selectedCollectionIdRef.current === collectionId) {
+            setAllCompanies(allResp.companies);
+            allCacheRef.current.set(key, allResp.companies);
+          }
         })
         .catch(() => {
         });
@@ -205,14 +210,31 @@ const CompanyTable = (props: CompanyTableProps) => {
   };
 
   useEffect(() => {
-    fetchData();
-  }, [props.selectedCollectionId, offset, pageSize, filterText, industriesSelected, fundingFilters, sizeRanges, filterLikedOnly]);
+    // Keep ref in sync for stale-response guards
+    selectedCollectionIdRef.current = props.selectedCollectionId;
+  }, [props.selectedCollectionId]);
 
   useEffect(() => {
+    if (isSwitchingRef.current) return;
+    fetchData();
+  }, [offset, pageSize, filterText, industriesSelected, fundingFilters, sizeRanges, filterLikedOnly]);
+
+  useEffect(() => {
+    // Immediately reset state when collection changes for faster switching and fetch once
+    isSwitchingRef.current = true;
     setOffset(0);
     setSelectionMode('none');
     setSelectedIds(new Set());
     setExcludedIds(new Set());
+    setResponse([]);
+    setTotal(0);
+    setAllCompanies([]);
+    allCacheRef.current.clear();
+    // Fetch once for the new collection
+    (async () => {
+      await fetchData();
+      isSwitchingRef.current = false;
+    })();
   }, [props.selectedCollectionId]);
 
   // Listen for live count increments from background bulk operations
@@ -314,7 +336,11 @@ const CompanyTable = (props: CompanyTableProps) => {
 
 
 
+  const [isAssigning, setIsAssigning] = useState(false);
+
   const handleAssign = async (targetCollectionId: string, targetName: string) => {
+    if (isAssigning) return;
+    
     const mode = selectionMode === 'all' ? 'all' : 'selected';
     const companyIds = getSelectedCompanyIds();
 
@@ -323,6 +349,7 @@ const CompanyTable = (props: CompanyTableProps) => {
       return;
     }
 
+    setIsAssigning(true);
     try {
       const result = await startBulkAdd(props.selectedCollectionId, targetCollectionId, {
         mode,
@@ -348,10 +375,13 @@ const CompanyTable = (props: CompanyTableProps) => {
     } catch (error) {
       console.error('Error starting bulk assign:', error);
       alert('Failed to start bulk assign operation');
+    } finally {
+      setIsAssigning(false);
     }
   };
 
   const handleBulkAddToLiked = async () => {
+    if (isAssigning) return;
     if (!likedCollection) {
       alert('Could not find "Liked Companies List" collection');
       return;
@@ -365,6 +395,7 @@ const CompanyTable = (props: CompanyTableProps) => {
       return;
     }
 
+    setIsAssigning(true);
     try {
       const result = await startBulkAdd(props.selectedCollectionId, likedCollection.id, {
         mode,
@@ -391,6 +422,8 @@ const CompanyTable = (props: CompanyTableProps) => {
     } catch (error) {
       console.error('Error starting bulk add:', error);
       alert('Failed to start bulk operation');
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -454,7 +487,7 @@ const CompanyTable = (props: CompanyTableProps) => {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="h-8 px-3 rounded-md border border-indigo-500/30">
                   {props.getCollectionName(props.selectedCollectionId)}
-                  {typeof total === 'number' && (
+                  {total > 0 && (
                     <span className="ml-2 text-xs text-muted-foreground">{total}</span>
                   )}
                 </Button>

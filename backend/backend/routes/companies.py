@@ -34,16 +34,16 @@ def fetch_companies_with_liked(
         .first()
     )
 
+    # IMPORTANT: filter on association.company_id to avoid an implicit
+    # cross-join between companies and associations (which explodes row counts)
     liked_associations = (
-        db.query(database.CompanyCollectionAssociation)
-        .filter(database.Company.id.in_(company_ids))
-        .filter(
-            database.CompanyCollectionAssociation.collection_id == liked_list.id,
-        )
+        db.query(database.CompanyCollectionAssociation.company_id)
+        .filter(database.CompanyCollectionAssociation.collection_id == liked_list.id)
+        .filter(database.CompanyCollectionAssociation.company_id.in_(company_ids))
         .all()
     )
 
-    liked_companies = {association.company_id for association in liked_associations}
+    liked_companies = {company_id for (company_id,) in liked_associations}
 
     companies = (
         db.query(database.Company).filter(database.Company.id.in_(company_ids)).all()

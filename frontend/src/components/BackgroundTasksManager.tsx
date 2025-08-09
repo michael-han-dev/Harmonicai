@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Undo2, CheckCircle2 } from "lucide-react";
 import { getOperationStatus, undoOperation, cancelOperation, IOperationStatus } from "../utils/jam-api";
@@ -27,6 +27,8 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
   const [uiStageByTask, setUiStageByTask] = useState<Record<string, UiStage>>({});
   // Local ephemeral tasks (e.g., interactive undo tasks started from within this component)
   const [ephemeralTasks, setEphemeralTasks] = useState<BackgroundTask[]>([]);
+  // Track last seen current per task to compute deltas robustly across re-renders
+  const prevCurrentByTaskRef = useRef<Record<string, number>>({});
 
   // Poll task statuses
   useEffect(() => {
@@ -43,12 +45,11 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
     const pollStatuses = async () => {
       for (const task of activeTasks) {
         try {
-          const prevStatus = taskStatuses[task.taskId];
+          const prevCurrent = prevCurrentByTaskRef.current[task.taskId] ?? 0;
           const status = await getOperationStatus(task.taskId);
           setTaskStatuses(prev => ({ ...prev, [task.taskId]: status }));
           // Emit live count increments every 50 moved items when bulk adding
-          if (task.type === 'bulk_add' && task.targetCollectionId && status?.current !== undefined) {
-            const prevCurrent = prevStatus?.current ?? 0;
+          if (task.type === 'bulk_add' && task.targetCollectionId && status?.current !== undefined && status.current > prevCurrent) {
             const prevBucket = Math.floor(prevCurrent / 50);
             const currentBucket = Math.floor(status.current / 50);
             if (currentBucket > prevBucket) {
@@ -57,6 +58,7 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
                 detail: { collectionId: task.targetCollectionId, amount }
               }));
             }
+            prevCurrentByTaskRef.current[task.taskId] = status.current;
           }
           
           if (status.status === 'cancelled') {
@@ -131,9 +133,9 @@ const BackgroundTasksManager = ({ tasks, onTaskComplete, onTaskRemove }: Backgro
     try {
       // Request graceful cancellation only. Do not auto-trigger undo.
       await cancelOperation(task.taskId);
-      // Optimistically reflect cancellation while polling catches up
+      // Mark as completed to stop polling and show cancelled state
+      setCompletedTasks(prev => new Set([...prev, task.taskId]));
       setUiStageByTask(prev => ({ ...prev, [task.taskId]: 'cancelled-show' }));
-      // Do not mark as completed here; let polling update the final state
       setTimeout(() => {
         setUiStageByTask(prev => ({ ...prev, [task.taskId]: 'hidden' }));
       }, 2000);

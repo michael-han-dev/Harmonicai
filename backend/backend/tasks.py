@@ -162,6 +162,8 @@ def bulk_add_companies(self, source_collection_id: str, target_collection_id: st
                         meta={"status": "resumed", "current": inserted_count, "total": total, "message": "Resuming after interactive task"}
                     )
 
+
+
                 association = database.CompanyCollectionAssociation(
                     company_id=company_id, collection_id=target_uuid
                 )
