@@ -25,3 +25,9 @@ I then implemented backend related features I thought were important. Examples: 
 - kanban style dragging features to rearrange rows/columns etc
 - double pane view (see example image below for reference):
 ![dual pane view](frontend/public/dualpane.png)
+
+
+## Forgot to show in Loom Video
+(When selecting an item, there is a small menu that appears with some actions that can be taken besides "add to collection")
+- delete specific rows
+- select items and flag them
